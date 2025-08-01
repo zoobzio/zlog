@@ -1,108 +1,83 @@
 package zlog
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"time"
+	"context"
+
+	"github.com/zoobzio/pipz"
 )
 
-// Sink defines the interface for event outputs.
-// Implementations should be thread-safe as they may be called concurrently.
-type Sink interface {
-	// Write processes an event. The implementation should not modify the event.
-	Write(event Event) error
-
-	// Name returns a descriptive name for debugging and error messages.
-	Name() string
+// Sink processes events routed by signal with composable capabilities.
+//
+// Sinks are the extensibility point of zlog - they determine what happens to
+// events after they're emitted. Common sink patterns include:
+//
+//   - Writing to files or stdout/stderr
+//   - Sending to external services (Elasticsearch, Datadog, etc.)
+//   - Filtering or transforming events
+//   - Aggregating metrics
+//   - Triggering alerts
+//
+// Multiple sinks can process the same signal concurrently. Each sink receives
+// its own copy of events, preventing interference between sinks.
+//
+// Sinks provide a fluent builder API for adding capabilities like retry,
+// batching, filtering, and async processing. Each capability wraps the
+// underlying processor with pipz primitives.
+//
+// Example with capabilities:
+//
+//	sink := zlog.NewSink("api", handler).
+//	    WithRetry(3).
+//	    WithTimeout(30 * time.Second)
+type Sink struct {
+	processor pipz.Chainable[Event]
 }
 
-// WriterSink writes JSON events to any io.Writer.
-type WriterSink struct {
-	writer io.Writer
+// Process delegates to the underlying processor.
+// This makes Sink implement pipz.Chainable[Event].
+func (s Sink) Process(ctx context.Context, event Event) (Event, error) {
+	return s.processor.Process(ctx, event)
 }
 
-// NewWriterSink creates a sink that writes JSON to the provided writer.
-func NewWriterSink(w io.Writer) Sink {
-	return &WriterSink{
-		writer: w,
+// Name returns the name of the underlying processor.
+func (s Sink) Name() pipz.Name {
+	return s.processor.Name()
+}
+
+// NewSink creates a custom sink that processes events.
+//
+// The name parameter identifies the sink in error messages and debugging output.
+// The handler function is called for each event routed to this sink.
+//
+// Example sink that writes to a file:
+//
+//	fileSink := zlog.NewSink("file-writer", func(ctx context.Context, event zlog.Event) error {
+//	    _, err := fmt.Fprintf(file, "[%s] %s: %s\n",
+//	        event.Time.Format(time.RFC3339),
+//	        event.Signal,
+//	        event.Message)
+//	    return err
+//	})
+//
+// Example sink that sends metrics:
+//
+//	metricSink := zlog.NewSink("metrics", func(ctx context.Context, event zlog.Event) error {
+//	    for _, field := range event.Fields {
+//	        if field.Key == "duration" {
+//	            metrics.RecordDuration(event.Signal, field.Value.(time.Duration))
+//	        }
+//	    }
+//	    return nil
+//	})
+//
+// Sinks should handle errors gracefully - returning an error doesn't affect
+// other sinks or the application. Sinks run asynchronously after Emit returns.
+//
+// The returned Sink can be enhanced with capabilities using the fluent API:
+//
+//	sink := zlog.NewSink("example", handler).WithRetry(3)
+func NewSink(name string, handler func(context.Context, Event) error) *Sink {
+	return &Sink{
+		processor: pipz.Effect(name, handler),
 	}
-}
-
-// Write encodes the event as JSON and writes it to the writer.
-func (s *WriterSink) Write(event Event) error {
-	// Build JSON structure
-	entry := map[string]interface{}{
-		"time":    event.Time.Format(time.RFC3339Nano),
-		"signal":  string(event.Signal),
-		"message": event.Message,
-	}
-
-	// Add caller info if available
-	if event.Caller.File != "" {
-		// Format as "file.go:42" for clean output
-		entry["caller"] = fmt.Sprintf("%s:%d", event.Caller.File, event.Caller.Line)
-	}
-
-	// Add fields
-	for _, field := range event.Fields {
-		entry[field.Key] = field.Value
-	}
-
-	encoder := json.NewEncoder(s.writer)
-	return encoder.Encode(entry)
-}
-
-// Name returns the sink name.
-func (s *WriterSink) Name() string {
-	return "writer"
-}
-
-// NewStandardLogSink creates a JSON sink that listens to standard log signals.
-// It automatically registers itself for INFO, WARN, ERROR, and FATAL signals.
-// Note: DEBUG is intentionally excluded - use NewDebugSink() for debug logging.
-func NewStandardLogSink(w io.Writer) Sink {
-	sink := NewWriterSink(w)
-
-	// Self-register for standard log signals (excluding DEBUG)
-	RouteSignal(INFO, sink)
-	RouteSignal(WARN, sink)
-	RouteSignal(ERROR, sink)
-	RouteSignal(FATAL, sink)
-
-	return sink
-}
-
-// NewDebugSink creates a JSON sink that listens only to DEBUG signals.
-// This allows debug logging to be enabled separately from standard logging.
-func NewDebugSink(w io.Writer) Sink {
-	sink := NewWriterSink(w)
-
-	// Self-register for debug signals only
-	RouteSignal(DEBUG, sink)
-
-	return sink
-}
-
-// NewAuditSink creates a JSON sink that listens to audit-related signals.
-// It automatically registers itself for AUDIT and SECURITY signals.
-func NewAuditSink(w io.Writer) Sink {
-	sink := NewWriterSink(w)
-
-	// Self-register for audit signals
-	RouteSignal(AUDIT, sink)
-	RouteSignal(SECURITY, sink)
-
-	return sink
-}
-
-// NewMetricSink creates a JSON sink that listens to metric signals.
-// It automatically registers itself for METRIC signals.
-func NewMetricSink(w io.Writer) Sink {
-	sink := NewWriterSink(w)
-
-	// Self-register for metric signals
-	RouteSignal(METRIC, sink)
-
-	return sink
 }

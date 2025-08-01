@@ -1,50 +1,32 @@
 # zlog
 
-Signal-based logging for Go. Move beyond traditional log levels to a flexible signal system where any string can trigger custom processing pipelines.
+Signal-based structured logging for Go that acknowledges different events need different handling.
 
-## Quick Start
+A different approach to logging that uses semantic signals instead of severity levels. Route payment events to your audit system, errors to your alerts, and metrics to your time-series database - all through one simple API.
 
 ```go
-package main
+// Traditional logging forces everything into severity levels
+log.Info("payment processed")  // Is this info or audit?
+log.Error("rate limit hit")    // Is this error or metric?
 
-import (
-    "os"
-    "github.com/zoobzio/zlog"
-)
+// zlog uses signals to route events where they belong
+zlog.Emit(PAYMENT_RECEIVED, "Payment processed",
+    zlog.String("user_id", "123"),
+    zlog.Float64("amount", 99.99))
 
-func main() {
-    // Enable standard logging (INFO, WARN, ERROR, FATAL)
-    zlog.EnableStandardLogging(os.Stderr)
-    
-    // Your application logs
-    zlog.Info("Server starting", zlog.Int("port", 8080))
-    zlog.Debug("This won't show - debug not enabled")
-    
-    // Something goes wrong
-    zlog.Error("Database connection failed", 
-        zlog.String("host", "localhost"),
-        zlog.Err(err),
-    )
-}
+zlog.RouteSignal(PAYMENT_RECEIVED, auditSink)   // → Audit trail
+zlog.RouteSignal(PAYMENT_RECEIVED, metricsSink) // → Revenue metrics
 ```
 
 ## Why zlog?
 
-### The Problem
-
-Traditional loggers force you into rigid level hierarchies (DEBUG < INFO < WARN < ERROR). But real applications have diverse logging needs:
-- Security events need different handling than debug logs
-- Audit trails require guaranteed delivery and special formatting
-- Business metrics shouldn't mix with application errors
-- Different environments need different log routing
-
-### The Solution  
-
-zlog treats logs as **signals** - any string can be a signal type that routes to specific handlers:
-- **Signal-based routing**: Route AUDIT logs to compliance storage, METRIC to monitoring systems
-- **Self-configuring sinks**: Handlers register for the signals they care about
-- **Environment flexibility**: Different signal routes for development vs production
-- **Concurrent processing**: Fast, thread-safe sink execution
+- **Signal-based routing**: Events go where they belong, not into severity buckets
+- **True structured logging**: Type-safe fields with compile-time safety
+- **Simple and fast**: Sequential sink processing for predictable performance
+- **Extensible**: Easy to add custom sinks for any destination
+- **Zero-allocation fields**: Field constructors create no heap allocations
+- **Simple**: Clean API that's easy to understand and use
+- **Built on pipz**: Access to pipeline patterns like retries and fallbacks when needed
 
 ## Installation
 
@@ -54,252 +36,327 @@ go get github.com/zoobzio/zlog
 
 Requirements: Go 1.21+ (for generics)
 
-## Real-World Scenarios
+## Quick Start
 
-### 1. Audit Trail for Compliance
+### Traditional Logging
 
-**Problem**: Financial services need tamper-proof audit logs separate from application logs, with guaranteed delivery to compliance systems.
-
-```go
-// Traditional approach - audit logs mixed with everything else
-logger.Info("User logged in", "user", "alice")
-logger.Info("Permission granted", "user", "alice", "permission", "admin")  // This is audit!
-logger.Debug("Cache miss", "key", "user:alice")
-logger.Info("Request completed", "duration", "45ms")
-
-// How do you extract just audit events from this mess?
-```
-
-**Solution**: Route audit signals to dedicated append-only storage:
+For a familiar logging experience with structured fields:
 
 ```go
-// Setup separate audit trail
-auditFile, _ := os.OpenFile("/secure/audit.log", 
-    os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-zlog.EnableAuditLogging(auditFile)
+import "github.com/zoobzio/zlog"
 
-// Application logs go to stderr
-zlog.EnableStandardLogging(os.Stderr)
-
-// Audit events are automatically separated
-zlog.Info("User logged in", zlog.String("user", "alice"))     // → stderr
-zlog.Audit("Permission granted",                               // → audit.log
-    zlog.String("user", "alice"),
-    zlog.String("permission", "admin"),
-    zlog.String("granted_by", "system"),
-)
-
-// Security events also go to audit trail
-zlog.Security("Failed login attempt",                          // → audit.log
-    zlog.String("ip", request.RemoteAddr),
-    zlog.Int("attempt", 3),
-)
-```
-
-### 2. Development vs Production Logging
-
-**Problem**: Developers need verbose debugging that would overwhelm production systems. Production needs structured logs for monitoring without the noise.
-
-```go
-// Traditional approach - complex configuration files
-if config.LogLevel == "debug" && config.Environment == "development" {
-    logger.SetLevel(DEBUG)
-} else if config.Environment == "production" {
-    logger.SetLevel(INFO) 
-}
-
-// But what about:
-// - Debug logs for just one module?
-// - Critical alerts that need different handling?
-// - Performance metrics that shouldn't go to stderr?
-```
-
-**Solution**: Environment-specific signal routing:
-
-```go
-if os.Getenv("ENV") == "production" {
-    // Production: JSON to stdout, no debug logs
-    zlog.EnableStandardLogging(os.Stdout)
+func main() {
+    // Enable JSON logging to stderr
+    zlog.EnableStandardLogging(zlog.INFO)
     
-    // Critical errors to alerting system
-    const ALERT zlog.Signal = "ALERT"
-    alertFile, _ := os.OpenFile("/var/log/alerts.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-    zlog.RouteSignal(ALERT, zlog.NewWriterSink(alertFile))
+    // Use familiar log levels
+    zlog.Info("Server starting", zlog.Int("port", 8080))
+    zlog.Debug("This won't show with INFO level")
     
-} else {
-    // Development: Pretty print with debug enabled
-    zlog.EnableStandardLogging(os.Stderr)
-    zlog.EnableDebugLogging(os.Stderr)
-    
-    // Slow queries to separate file for analysis
-    const SLOW_QUERY zlog.Signal = "SLOW_QUERY"
-    slowFile, _ := os.Create("slow-queries.log")
-    zlog.RouteSignal(SLOW_QUERY, zlog.NewWriterSink(slowFile))
-}
-
-// Same code works in both environments
-zlog.Debug("Cache lookup", zlog.String("key", key))           // Only in dev
-zlog.Info("Request handled", zlog.Duration("latency", took))  // Both environments
-
-if took > 5*time.Second {
-    zlog.Emit(ALERT, "Request too slow",                      // Pages in prod
-        zlog.Duration("latency", took),
-        zlog.String("endpoint", r.URL.Path),
-    )
+    // Structured fields with type safety
+    zlog.Error("Connection failed",
+        zlog.Err(err),
+        zlog.String("host", "db.example.com"),
+        zlog.Duration("timeout", 30*time.Second))
 }
 ```
 
-### 3. Distributed System Correlation
+### Signal-Based Routing
 
-**Problem**: Microservices make debugging difficult - a single request touches multiple services and finding all related logs is painful.
-
-```go
-// Traditional approach - logs scattered everywhere
-// api-gateway.log:
-// 2024-01-20 10:30:45 INFO Request received /api/orders
-
-// user-service.log:
-// 2024-01-20 10:30:45 INFO Fetching user 12345
-// 2024-01-20 10:30:46 ERROR Database timeout
-
-// order-service.log:  
-// 2024-01-20 10:30:47 INFO Creating order for user 12345
-
-// Which logs belong to the same request? Good luck figuring that out!
-```
-
-**Solution**: Trace propagation with structured fields:
+Define signals that match your application's events:
 
 ```go
-// API Gateway starts the trace
-traceID := generateTraceID()
-ctx = context.WithValue(ctx, "trace_id", traceID)
-
-zlog.Info("Request received",
-    zlog.String("trace_id", traceID),
-    zlog.String("service", "api-gateway"),
-    zlog.String("endpoint", "/api/orders"),
+// Define domain-specific signals
+const (
+    PAYMENT_RECEIVED = zlog.Signal("PAYMENT_RECEIVED")
+    PAYMENT_FAILED   = zlog.Signal("PAYMENT_FAILED")
+    USER_LOGIN       = zlog.Signal("USER_LOGIN")
+    CACHE_MISS       = zlog.Signal("CACHE_MISS")
 )
 
-// User Service (automatic trace propagation)
-func GetUser(ctx context.Context, userID string) (*User, error) {
-    traceID := ctx.Value("trace_id").(string)
-    
-    zlog.Info("Fetching user",
-        zlog.String("trace_id", traceID),
-        zlog.String("service", "user-service"),
-        zlog.String("user_id", userID),
-    )
-    
-    user, err := db.GetUser(userID)
-    if err != nil {
-        zlog.Error("User fetch failed",
-            zlog.String("trace_id", traceID),
-            zlog.String("service", "user-service"), 
-            zlog.Err(err),
-        )
-        return nil, err
+// Create specialized sinks
+auditSink := zlog.NewSink("audit", func(ctx context.Context, e zlog.Event) error {
+    // Write to audit log with regulatory compliance formatting
+    return auditWriter.WriteEvent(e)
+})
+
+alertSink := zlog.NewSink("alerts", func(ctx context.Context, e zlog.Event) error {
+    if e.Signal == PAYMENT_FAILED {
+        return slack.PostAlert(e.Message, e.Fields)
     }
-    
-    return user, nil
-}
+    return nil
+})
 
-// Find all logs across services:
-// grep "trace_123" *.log | jq -s 'sort_by(.time)'
+// Route signals to appropriate handlers (multiple sinks per signal)
+zlog.RouteSignal(PAYMENT_RECEIVED, auditSink)
+zlog.RouteSignal(PAYMENT_FAILED, auditSink, alertSink)  // Goes to both!
+zlog.RouteSignal(USER_LOGIN, auditSink)
+zlog.RouteSignal(CACHE_MISS, metricsSink)
+
+// Emit events with meaning
+zlog.Emit(PAYMENT_RECEIVED, "Payment processed successfully",
+    zlog.String("user_id", userID),
+    zlog.String("payment_id", paymentID),
+    zlog.Float64("amount", amount),
+    zlog.String("currency", "USD"))
 ```
 
 ## Core Concepts
 
-### Signals, Not Levels
+### Signals vs Levels
 
-Traditional loggers use levels. zlog uses signals:
+Traditional logging makes you choose a "severity" for every event. But is a failed payment an ERROR or a WARN? Is a successful login INFO or DEBUG? These aren't severity decisions - they're routing decisions.
 
-```go
-// Built-in signals
-zlog.Debug("Detailed trace")          // DEBUG signal
-zlog.Info("Normal operation")         // INFO signal  
-zlog.Warn("Potential issue")          // WARN signal
-zlog.Error("Operation failed")        // ERROR signal
-
-// Pre-defined domain signals
-zlog.Audit("Compliance event")        // AUDIT signal
-zlog.Security("Security event")       // SECURITY signal
-zlog.Metric("Performance data")       // METRIC signal
-
-// Custom signals
-const PAYMENT zlog.Signal = "PAYMENT"
-const FRAUD zlog.Signal = "FRAUD"
-const SLOW_QUERY zlog.Signal = "SLOW_QUERY"
-```
-
-### Self-Registering Sinks
-
-Sinks automatically register for their signals:
+Signals let you say what happened, not how important it is:
 
 ```go
-type ErrorCountingSink struct {
-    writer io.Writer
-    errors int64
-}
+// Instead of arguing about severity...
+log.Warn("Payment declined")  // or is it Error? Info?
 
-func (s *ErrorCountingSink) Write(event zlog.Event) error {
-    atomic.AddInt64(&s.errors, 1)
-    // Also write to file/stdout/etc
-    return zlog.NewWriterSink(s.writer).Write(event)
-}
-
-func (s *ErrorCountingSink) Name() string {
-    return "error_counter"
-}
-
-// Constructor self-registers for error signals
-func NewErrorCountingSink(w io.Writer) *ErrorCountingSink {
-    sink := &ErrorCountingSink{writer: w}
-    
-    // Self-register for signals we care about
-    zlog.RouteSignal(zlog.ERROR, sink)
-    zlog.RouteSignal(zlog.FATAL, sink)
-    
-    return sink
-}
-
-// Just create it - registration happens automatically
-errorCounter := NewErrorCountingSink(os.Stderr)
+// Say what actually happened
+zlog.Emit(PAYMENT_DECLINED, "Card declined", 
+    zlog.String("reason", "insufficient_funds"))
 ```
 
 ### Structured Fields
 
-Type-safe field construction:
+Type-safe field constructors prevent errors at compile time:
 
 ```go
-zlog.Info("Order processed",
-    zlog.String("order_id", order.ID),
-    zlog.String("customer_id", order.CustomerID),  
-    zlog.Float64("amount", order.Total),
-    zlog.Int("items", len(order.Items)),
-    zlog.Duration("processing_time", elapsed),
-    zlog.Time("completed_at", time.Now()),
-    zlog.Err(err), // nil-safe
-)
+zlog.Info("Request completed",
+    zlog.String("method", "POST"),
+    zlog.String("path", "/api/users"),
+    zlog.Int("status", 201),
+    zlog.Duration("latency", time.Since(start)),
+    zlog.Time("timestamp", time.Now()),
+    zlog.Err(err),  // nil-safe
+    zlog.Data("user", user))  // arbitrary types
 ```
+
+### Multiple Sinks
+
+Events can go to multiple destinations in a single call:
+
+```go
+// Route errors to multiple handlers at once
+zlog.RouteSignal(zlog.ERROR, fileSink, consoleSink, alertSink, metricsSink)
+
+// Or add them separately - same effect
+zlog.RouteSignal(zlog.ERROR, fileSink)     // Permanent record
+zlog.RouteSignal(zlog.ERROR, consoleSink)  // Developer visibility
+```
+
+### Sampling High-Volume Events
+
+Reduce load while maintaining visibility with sampling:
+
+```go
+// Sample 10% of cache hits (high volume)
+cacheSink := metricsSink.WithSampling(0.1)
+zlog.RouteSignal(CACHE_HIT, cacheSink)
+
+// Sample 1% of API requests
+apiSink := fileSink.WithSampling(0.01).WithAsync()
+zlog.RouteSignal(API_REQUEST, apiSink)
+
+// For statistical sampling use probabilistic mode
+randomSink := debugSink.WithProbabilisticSampling(0.25) // 25% random sample
+```
+
+### Creating Modules
+
+Modules are just functions that set up routing. See `log.go` for the standard logging module:
+
+```go
+// myapp/logging/siem.go
+package logging
+
+import (
+    "github.com/zoobzio/zlog"
+    "github.com/splunk/splunk-sdk-go"
+)
+
+var siemSink = zlog.NewSink("siem-forwarder", func(ctx context.Context, e zlog.Event) error {
+    return splunk.Send(convertToSplunkEvent(e))
+})
+
+// EnableSIEMForwarding routes security events to your SIEM
+func EnableSIEMForwarding(config SIEMConfig) error {
+    if err := splunk.Connect(config); err != nil {
+        return err
+    }
+    
+    zlog.RouteSignal(zlog.SECURITY, siemSink)
+    zlog.RouteSignal(zlog.AUDIT, siemSink)
+    zlog.RouteSignal("INTRUSION_DETECTED", siemSink)
+    zlog.RouteSignal("PRIVILEGE_ESCALATION", siemSink)
+    
+    return nil
+}
+```
+
+## Examples
+
+### Web Service
+
+```go
+const (
+    REQUEST_START    = zlog.Signal("REQUEST_START")
+    REQUEST_COMPLETE = zlog.Signal("REQUEST_COMPLETE")
+    AUTH_FAILED      = zlog.Signal("AUTH_FAILED")
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+    start := time.Now()
+    
+    zlog.Emit(REQUEST_START, "Handling request",
+        zlog.String("method", r.Method),
+        zlog.String("path", r.URL.Path),
+        zlog.String("remote_addr", r.RemoteAddr))
+    
+    if !authenticate(r) {
+        zlog.Emit(AUTH_FAILED, "Authentication failed",
+            zlog.String("path", r.URL.Path),
+            zlog.String("auth_header", r.Header.Get("Authorization")))
+        http.Error(w, "Unauthorized", 401)
+        return
+    }
+    
+    // ... handle request ...
+    
+    zlog.Emit(REQUEST_COMPLETE, "Request completed",
+        zlog.String("method", r.Method),
+        zlog.String("path", r.URL.Path),
+        zlog.Int("status", 200),
+        zlog.Duration("latency", time.Since(start)))
+}
+```
+
+### Background Jobs
+
+```go
+const (
+    JOB_STARTED   = zlog.Signal("JOB_STARTED")
+    JOB_COMPLETED = zlog.Signal("JOB_COMPLETED")
+    JOB_FAILED    = zlog.Signal("JOB_FAILED")
+    JOB_RETRY     = zlog.Signal("JOB_RETRY")
+)
+
+func processJob(job Job) {
+    zlog.Emit(JOB_STARTED, "Processing job",
+        zlog.String("job_id", job.ID),
+        zlog.String("type", job.Type))
+    
+    for attempt := 0; attempt < maxRetries; attempt++ {
+        if err := job.Execute(); err != nil {
+            zlog.Emit(JOB_RETRY, "Job failed, retrying",
+                zlog.String("job_id", job.ID),
+                zlog.Int("attempt", attempt+1),
+                zlog.Err(err))
+            time.Sleep(backoff(attempt))
+            continue
+        }
+        
+        zlog.Emit(JOB_COMPLETED, "Job completed successfully",
+            zlog.String("job_id", job.ID),
+            zlog.Duration("duration", time.Since(start)))
+        return
+    }
+    
+    zlog.Emit(JOB_FAILED, "Job failed after all retries",
+        zlog.String("job_id", job.ID),
+        zlog.Int("attempts", maxRetries))
+}
+```
+
+## Advanced Capabilities with pipz
+
+zlog is built on [pipz](https://github.com/zoobzio/pipz), giving you access to sophisticated event processing when you need it:
+
+```go
+// Start simple - basic routing
+zlog.RouteSignal(PAYMENT_FAILED, alertSink)
+
+// Add reliability when needed
+reliableAudit := pipz.Retry("audit-write", 3, auditSink)
+zlog.RouteSignal(PAYMENT_RECEIVED, reliableAudit)
+
+// Or build complex processing pipelines
+errorPipeline := pipz.NewSequence("error-handling",
+    pipz.Apply("sanitize", removeSensitiveData),
+    pipz.NewFallback("delivery",
+        pipz.Retry("primary", 3, sendToElasticsearch),
+        pipz.Apply("fallback", writeToLocalFile),
+    ),
+    pipz.Effect("metrics", updateErrorMetrics),
+)
+zlog.RouteSignal(ERROR, errorPipeline)
+```
+
+With pipz integration, you get:
+- **Retry with backoff** - Automatic retries for transient failures
+- **Fallback chains** - Primary/backup sink strategies  
+- **Circuit breakers** - Protect against cascading failures
+- **Concurrent processing** - Fan-out to multiple sinks in parallel
+- **Event transformation** - Modify events before delivery
+- **Conditional routing** - Route based on event content
+- **And much more** - Full pipeline capabilities when you need them
+
+The beauty is progressive complexity - use simple sinks for simple needs, tap into pipz power when you need sophisticated processing.
+
+## Design Philosophy
+
+1. **Events have types, not severities**: A payment failure isn't an "error level" - it's a payment failure that might need fraud detection, customer notification, and metric tracking.
+
+2. **Structured data is primary**: Messages are for humans, fields are for machines. Every event should include rich context.
+
+3. **Multiple handlers are normal**: Real events often need multiple actions. Sequential routing keeps it simple and fast.
+
+4. **Simple things should be simple**: You can use zlog like a traditional logger with `EnableStandardLogging()` and gradually adopt signals.
+
+5. **Progressive complexity**: Start with simple sequential processing. Add pipz pipelines when you need retries, concurrency, or transformations.
 
 ## Performance
 
-- Zero-allocation field construction
-- Lock-free signal routing via sync.Map
-- Concurrent sink processing through pipz
-- No reflection in the hot path
+zlog is designed with performance in mind:
 
-## Documentation
+- **Zero-allocation field constructors**: Field creation benchmarks show 0 allocations
+- **Efficient routing**: Direct dispatch to sinks without cloning
+- **Sequential processing**: Predictable performance without concurrency overhead
+- **95.9% test coverage**: Comprehensive test suite
+- **Benchmarked**: See BENCHMARKS.md for detailed performance metrics
 
-📚 **[Full Documentation](./docs/)**
+## Questions & Answers
 
-- [Examples](./examples/) - 10 real-world scenarios with tests
-- [API Reference](./docs/api.md) - Complete API documentation
-- [Custom Sinks](./docs/sinks.md) - Building your own sinks
-- [Best Practices](./docs/best-practices.md) - Production patterns
+**How is this different from traditional loggers?**
 
+Traditional loggers focus on severity (debug < info < warn < error). zlog focuses on event types. You don't filter by "level", you route by signal.
+
+**Can I use both signals and levels?**
+
+Yes! `EnableStandardLogging()` provides familiar level-based logging. You can mix approaches as needed.
+
+**What about log sampling/filtering?**
+
+Create a filtering sink using pipz capabilities:
+```go
+samplingSink := pipz.NewSampler(0.1, actualSink) // 10% sampling
+zlog.RouteSignal(HIGH_VOLUME_SIGNAL, samplingSink)
+```
+
+**How do I rotate log files?**
+
+File rotation belongs in the sink, not the logger. Use a proper file sink like lumberjack or let your platform handle it (systemd, Docker, K8s).
+
+## Contributing
+
+Contributions welcome! Please ensure:
+- Tests pass: `go test ./...`
+- Coverage maintained: `go test -cover` (currently 95.9%)
+- Benchmarks pass: `go test -bench=.`
+- Code is formatted: `go fmt ./...`
+- Lint passes: `golangci-lint run`
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details.

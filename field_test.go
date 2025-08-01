@@ -124,11 +124,12 @@ func TestFieldConstructors(t *testing.T) {
 				switch v := tt.wantValue.(type) {
 				case []string:
 					got, ok := tt.field.Value.([]string)
-					if !ok {
+					switch {
+					case !ok:
 						t.Errorf("Value type mismatch for []string")
-					} else if len(got) != len(v) {
+					case len(got) != len(v):
 						t.Errorf("Slice length = %v, want %v", len(got), len(v))
-					} else {
+					default:
 						for i := range v {
 							if got[i] != v[i] {
 								t.Errorf("Slice element[%d] = %v, want %v", i, got[i], v[i])
@@ -186,96 +187,4 @@ func TestFieldEdgeCases(t *testing.T) {
 			t.Logf("Value = %v (type %T), implementation may convert nil to empty slice", field.Value, field.Value)
 		}
 	})
-}
-
-// Benchmarks.
-func BenchmarkFieldCreation(b *testing.B) {
-	b.Run("String", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = String("key", "value")
-		}
-	})
-
-	b.Run("Int", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = Int("key", 42)
-		}
-	})
-
-	b.Run("Float64", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = Float64("key", 3.14159)
-		}
-	})
-
-	b.Run("Bool", func(b *testing.B) {
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_ = Bool("key", true)
-		}
-	})
-
-	b.Run("Time", func(b *testing.B) {
-		b.ReportAllocs()
-		now := time.Now()
-		for i := 0; i < b.N; i++ {
-			_ = Time("key", now)
-		}
-	})
-
-	b.Run("Duration", func(b *testing.B) {
-		b.ReportAllocs()
-		dur := 5 * time.Second
-		for i := 0; i < b.N; i++ {
-			_ = Duration("key", dur)
-		}
-	})
-
-	b.Run("Error", func(b *testing.B) {
-		b.ReportAllocs()
-		err := errors.New("benchmark error")
-		for i := 0; i < b.N; i++ {
-			_ = Err(err)
-		}
-	})
-
-	b.Run("ByteString", func(b *testing.B) {
-		b.ReportAllocs()
-		data := []byte("benchmark data")
-		for i := 0; i < b.N; i++ {
-			_ = ByteString("key", data)
-		}
-	})
-
-	b.Run("Strings", func(b *testing.B) {
-		b.ReportAllocs()
-		values := []string{"a", "b", "c"}
-		for i := 0; i < b.N; i++ {
-			_ = Strings("key", values)
-		}
-	})
-
-	b.Run("Data", func(b *testing.B) {
-		b.ReportAllocs()
-		data := struct{ ID int }{ID: 123}
-		for i := 0; i < b.N; i++ {
-			_ = Data("key", data)
-		}
-	})
-}
-
-func BenchmarkMultipleFields(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		fields := []Field{
-			String("user", "alice"),
-			Int("user_id", 42),
-			Bool("active", true),
-			Time("timestamp", time.Now()),
-		}
-		_ = fields
-	}
 }

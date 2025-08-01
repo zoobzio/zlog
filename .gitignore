@@ -1,0 +1,8 @@
+
+# Example binaries
+examples/*/custom-fields
+examples/*/custom-signals
+examples/*/custom-sink
+examples/*/event-pipeline
+examples/*/standard-logging
+*.log

@@ -11,6 +11,7 @@ help:
 	@echo "Testing & Quality:"
 	@echo "  make test         - Run all tests with race detector"
 	@echo "  make test-examples- Run tests for all examples"
+	@echo "  make build-examples - Build all example programs"
 	@echo "  make bench        - Run core library benchmarks"
 	@echo "  make bench-all    - Run all benchmarks (core + examples)"
 	@echo "  make lint         - Run linters"
@@ -28,6 +29,16 @@ help:
 test:
 	@echo "Running core tests..."
 	@go test -v -race ./...
+
+# Build all examples
+build-examples:
+	@echo "Building examples..."
+	@for dir in examples/*/; do \
+		if [ -f "$$dir/main.go" ]; then \
+			echo "Building $$dir"; \
+			(cd "$$dir" && go build -v); \
+		fi \
+	done
 
 # Run tests for all examples
 test-examples:
@@ -100,6 +111,12 @@ clean:
 	@find . -name "*.test" -delete
 	@find . -name "*.prof" -delete
 	@find . -name "*.out" -delete
+	@find . -name "*.log" -delete
+	@for dir in examples/*/; do \
+		if [ -f "$$dir/main.go" ]; then \
+			(cd "$$dir" && rm -f $$(basename $$dir)); \
+		fi \
+	done
 
 # Install development tools
 install-tools:
