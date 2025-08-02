@@ -71,13 +71,13 @@ func (mq *MessageQueue) Publish(message string) error {
 
 // NewMetricsSink creates a sink that extracts metrics from events.
 func NewMetricsSink(collector *MetricsCollector) *zlog.Sink {
-	return zlog.NewSink("metrics", func(ctx context.Context, event zlog.Event) error {
+	return zlog.NewSink("metrics", func(ctx context.Context, event zlog.Log) error {
 		// Count events by signal
 		metricName := strings.ToLower(string(event.Signal))
 		collector.IncrementCounter(metricName+".count", 1)
 
 		// Extract numeric fields as metrics
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			switch field.Key {
 			case "duration":
 				if d, ok := field.Value.(time.Duration); ok {
@@ -106,7 +106,7 @@ func NewMessageQueueSink(queue *MessageQueue, signals ...zlog.Signal) *zlog.Sink
 		signalSet[s] = true
 	}
 
-	return zlog.NewSink("message-queue", func(ctx context.Context, event zlog.Event) error {
+	return zlog.NewSink("message-queue", func(ctx context.Context, event zlog.Log) error {
 		// Only publish specific signals
 		if len(signalSet) > 0 && !signalSet[event.Signal] {
 			return nil
@@ -120,7 +120,7 @@ func NewMessageQueueSink(queue *MessageQueue, signals ...zlog.Signal) *zlog.Sink
 		}
 
 		// Add selected fields
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			// Only include serializable fields
 			switch field.Key {
 			case "user_id", "order_id", "amount", "status":
@@ -140,18 +140,18 @@ func NewMessageQueueSink(queue *MessageQueue, signals ...zlog.Signal) *zlog.Sink
 
 // NewDatabaseAuditSink creates a sink that would write to a database.
 func NewDatabaseAuditSink() *zlog.Sink {
-	return zlog.NewSink("database-audit", func(ctx context.Context, event zlog.Event) error {
+	return zlog.NewSink("database-audit", func(ctx context.Context, event zlog.Log) error {
 		// In a real implementation, this would use database/sql or an ORM
-		
+
 		// Simulate building an SQL insert
 		var fields []string
 		var values []interface{}
-		
+
 		fields = append(fields, "timestamp", "signal", "message")
 		values = append(values, event.Time, string(event.Signal), event.Message)
 
 		// Extract audit-relevant fields
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			switch field.Key {
 			case "user_id", "ip", "action", "resource", "result":
 				fields = append(fields, field.Key)
@@ -160,7 +160,7 @@ func NewDatabaseAuditSink() *zlog.Sink {
 		}
 
 		// Simulate the insert
-		fmt.Printf("🗄️  [DB] INSERT INTO audit_log (%s) VALUES (%v)\n", 
+		fmt.Printf("🗄️  [DB] INSERT INTO audit_log (%s) VALUES (%v)\n",
 			strings.Join(fields, ", "), values)
 
 		return nil
@@ -168,8 +168,8 @@ func NewDatabaseAuditSink() *zlog.Sink {
 }
 
 // NewConditionalSink creates a sink that only processes events matching a condition.
-func NewConditionalSink(name string, condition func(zlog.Event) bool, handler func(zlog.Event)) *zlog.Sink {
-	return zlog.NewSink(name, func(ctx context.Context, event zlog.Event) error {
+func NewConditionalSink(name string, condition func(zlog.Log) bool, handler func(zlog.Log)) *zlog.Sink {
+	return zlog.NewSink(name, func(ctx context.Context, event zlog.Log) error {
 		if condition(event) {
 			handler(event)
 		}
@@ -179,21 +179,21 @@ func NewConditionalSink(name string, condition func(zlog.Event) bool, handler fu
 
 // NewBatchingSink creates a sink that batches events before processing.
 type BatchingSink struct {
-	events   []zlog.Event
+	events   []zlog.Log
 	maxBatch int
-	handler  func([]zlog.Event) error
+	handler  func([]zlog.Log) error
 }
 
-func NewBatchingSink(maxBatch int, handler func([]zlog.Event) error) *zlog.Sink {
+func NewBatchingSink(maxBatch int, handler func([]zlog.Log) error) *zlog.Sink {
 	bs := &BatchingSink{
-		events:   make([]zlog.Event, 0, maxBatch),
+		events:   make([]zlog.Log, 0, maxBatch),
 		maxBatch: maxBatch,
 		handler:  handler,
 	}
 
-	return zlog.NewSink("batching", func(ctx context.Context, event zlog.Event) error {
+	return zlog.NewSink("batching", func(ctx context.Context, event zlog.Log) error {
 		bs.events = append(bs.events, event)
-		
+
 		if len(bs.events) >= bs.maxBatch {
 			// Process the batch
 			err := bs.handler(bs.events)
@@ -201,17 +201,17 @@ func NewBatchingSink(maxBatch int, handler func([]zlog.Event) error) *zlog.Sink 
 			bs.events = bs.events[:0]
 			return err
 		}
-		
+
 		return nil
 	})
 }
 
 // Define some signals
 const (
-	API_REQUEST    = zlog.Signal("API_REQUEST")
-	PAYMENT_EVENT  = zlog.Signal("PAYMENT_EVENT")
-	USER_ACTION    = zlog.Signal("USER_ACTION")
-	SYSTEM_METRIC  = zlog.Signal("SYSTEM_METRIC")
+	API_REQUEST   = zlog.Signal("API_REQUEST")
+	PAYMENT_EVENT = zlog.Signal("PAYMENT_EVENT")
+	USER_ACTION   = zlog.Signal("USER_ACTION")
+	SYSTEM_METRIC = zlog.Signal("SYSTEM_METRIC")
 )
 
 func main() {
@@ -222,16 +222,16 @@ func main() {
 	// Create our external systems
 	metrics := NewMetricsCollector()
 	orderQueue := NewMessageQueue("orders")
-	
+
 	// Create custom sinks
 	metricsSink := NewMetricsSink(metrics)
 	queueSink := NewMessageQueueSink(orderQueue, PAYMENT_EVENT)
 	auditSink := NewDatabaseAuditSink()
-	
+
 	// Create a conditional sink for high-value transactions
-	highValueSink := NewConditionalSink("high-value", 
-		func(e zlog.Event) bool {
-			for _, field := range e.Fields {
+	highValueSink := NewConditionalSink("high-value",
+		func(e zlog.Log) bool {
+			for _, field := range e.Data {
 				if field.Key == "amount" {
 					if v, ok := field.Value.(float64); ok && v > 1000 {
 						return true
@@ -240,13 +240,13 @@ func main() {
 			}
 			return false
 		},
-		func(e zlog.Event) {
+		func(e zlog.Log) {
 			fmt.Printf("💰 [HIGH VALUE] %s: %s\n", e.Signal, e.Message)
 		},
 	)
 
 	// Create a batching sink
-	batchSink := NewBatchingSink(3, func(events []zlog.Event) error {
+	batchSink := NewBatchingSink(3, func(events []zlog.Log) error {
 		fmt.Printf("📦 [BATCH] Processing %d events\n", len(events))
 		for _, e := range events {
 			fmt.Printf("   - %s: %s\n", e.Signal, e.Message)
@@ -267,7 +267,7 @@ func main() {
 
 	// Generate some events
 	fmt.Println("--- Simulating Events ---")
-	
+
 	// API requests
 	for i := 0; i < 3; i++ {
 		zlog.Emit(API_REQUEST, "API request handled",
@@ -311,7 +311,7 @@ func main() {
 	fmt.Println("\n=== Example Complete ===")
 	fmt.Println("Custom sinks demonstrated:")
 	fmt.Println("- Metrics extraction")
-	fmt.Println("- Message queue publishing")  
+	fmt.Println("- Message queue publishing")
 	fmt.Println("- Database audit logging")
 	fmt.Println("- Conditional processing")
 	fmt.Println("- Event batching")

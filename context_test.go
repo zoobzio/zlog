@@ -19,7 +19,7 @@ func TestContextPropagation(t *testing.T) {
 	var mu sync.Mutex
 
 	// Create a sink that captures the context it receives
-	testSink := NewSink("context-test", func(receivedCtx context.Context, _ Event) error {
+	testSink := NewSink("context-test", func(receivedCtx context.Context, _ Log) error {
 		mu.Lock()
 		capturedContext = receivedCtx
 		mu.Unlock()

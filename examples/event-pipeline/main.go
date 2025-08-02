@@ -19,14 +19,14 @@ import (
 // Business event signals for our e-commerce platform
 const (
 	// User events
-	USER_SIGNUP       = zlog.Signal("USER_SIGNUP")
-	USER_LOGIN        = zlog.Signal("USER_LOGIN") 
+	USER_SIGNUP         = zlog.Signal("USER_SIGNUP")
+	USER_LOGIN          = zlog.Signal("USER_LOGIN")
 	USER_PROFILE_UPDATE = zlog.Signal("USER_PROFILE_UPDATE")
 
 	// Product events
-	PRODUCT_VIEWED    = zlog.Signal("PRODUCT_VIEWED")
-	PRODUCT_SEARCHED  = zlog.Signal("PRODUCT_SEARCHED")
-	REVIEW_POSTED     = zlog.Signal("REVIEW_POSTED")
+	PRODUCT_VIEWED   = zlog.Signal("PRODUCT_VIEWED")
+	PRODUCT_SEARCHED = zlog.Signal("PRODUCT_SEARCHED")
+	REVIEW_POSTED    = zlog.Signal("REVIEW_POSTED")
 
 	// Commerce events
 	CART_UPDATED      = zlog.Signal("CART_UPDATED")
@@ -36,32 +36,32 @@ const (
 	ORDER_SHIPPED     = zlog.Signal("ORDER_SHIPPED")
 
 	// System events
-	CACHE_HIT         = zlog.Signal("CACHE_HIT")
-	CACHE_MISS        = zlog.Signal("CACHE_MISS")
-	API_CALLED        = zlog.Signal("API_CALLED")
-	RATE_LIMITED      = zlog.Signal("RATE_LIMITED")
-	SERVICE_HEALTH    = zlog.Signal("SERVICE_HEALTH")
+	CACHE_HIT      = zlog.Signal("CACHE_HIT")
+	CACHE_MISS     = zlog.Signal("CACHE_MISS")
+	API_CALLED     = zlog.Signal("API_CALLED")
+	RATE_LIMITED   = zlog.Signal("RATE_LIMITED")
+	SERVICE_HEALTH = zlog.Signal("SERVICE_HEALTH")
 )
 
 // EventCorrelator tracks related events across the system.
 type EventCorrelator struct {
 	mu       sync.RWMutex
-	sessions map[string][]zlog.Event
+	sessions map[string][]zlog.Log
 }
 
 func NewEventCorrelator() *EventCorrelator {
 	return &EventCorrelator{
-		sessions: make(map[string][]zlog.Event),
+		sessions: make(map[string][]zlog.Log),
 	}
 }
 
-func (ec *EventCorrelator) AddEvent(sessionID string, event zlog.Event) {
+func (ec *EventCorrelator) AddEvent(sessionID string, event zlog.Log) {
 	ec.mu.Lock()
 	defer ec.mu.Unlock()
 	ec.sessions[sessionID] = append(ec.sessions[sessionID], event)
 }
 
-func (ec *EventCorrelator) GetSession(sessionID string) []zlog.Event {
+func (ec *EventCorrelator) GetSession(sessionID string) []zlog.Log {
 	ec.mu.RLock()
 	defer ec.mu.RUnlock()
 	return ec.sessions[sessionID]
@@ -84,17 +84,17 @@ func (ma *MetricsAggregator) SetGauge(name string, value float64) {
 
 func (ma *MetricsAggregator) GetStats() map[string]interface{} {
 	stats := make(map[string]interface{})
-	
+
 	ma.counters.Range(func(key, value interface{}) bool {
 		stats[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
-	
+
 	ma.gauges.Range(func(key, value interface{}) bool {
 		stats[key.(string)] = value.(float64)
 		return true
 	})
-	
+
 	return stats
 }
 
@@ -105,9 +105,9 @@ var (
 )
 
 // correlationSink adds events to the correlation engine.
-var correlationSink = zlog.NewSink("correlation", func(ctx context.Context, event zlog.Event) error {
+var correlationSink = zlog.NewSink("correlation", func(ctx context.Context, event zlog.Log) error {
 	// Extract session ID from fields
-	for _, field := range event.Fields {
+	for _, field := range event.Data {
 		if field.Key == "session_id" {
 			if sessionID, ok := field.Value.(string); ok {
 				correlator.AddEvent(sessionID, event)
@@ -119,12 +119,12 @@ var correlationSink = zlog.NewSink("correlation", func(ctx context.Context, even
 })
 
 // metricsSink extracts metrics from events.
-var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.Event) error {
+var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.Log) error {
 	// Count all events by signal
 	metrics.IncrementCounter(string(event.Signal))
-	
+
 	// Extract specific metrics
-	for _, field := range event.Fields {
+	for _, field := range event.Data {
 		switch field.Key {
 		case "response_time":
 			if d, ok := field.Value.(time.Duration); ok {
@@ -140,12 +140,12 @@ var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.E
 			}
 		}
 	}
-	
+
 	return nil
 })
 
 // businessAnalyticsSink processes business events for analytics.
-var businessAnalyticsSink = zlog.NewSink("analytics", func(ctx context.Context, event zlog.Event) error {
+var businessAnalyticsSink = zlog.NewSink("analytics", func(ctx context.Context, event zlog.Log) error {
 	// In a real system, this would send to a data warehouse
 	switch event.Signal {
 	case PRODUCT_VIEWED, PRODUCT_SEARCHED:
@@ -157,16 +157,16 @@ var businessAnalyticsSink = zlog.NewSink("analytics", func(ctx context.Context, 
 })
 
 // alertingSink handles critical events that need immediate attention.
-var alertingSink = zlog.NewSink("alerting", func(ctx context.Context, event zlog.Event) error {
+var alertingSink = zlog.NewSink("alerting", func(ctx context.Context, event zlog.Log) error {
 	fmt.Printf("🚨 [ALERT] %s: %s\n", event.Signal, event.Message)
 	return nil
-}).WithFilter(func(_ context.Context, event zlog.Event) bool {
+}).WithFilter(func(_ context.Context, event zlog.Log) bool {
 	// Only alert on critical signals
 	return event.Signal == RATE_LIMITED || event.Signal == zlog.ERROR || event.Signal == zlog.FATAL
 })
 
 // auditSink provides compliance logging.
-var auditSink = zlog.NewSink("audit", func(ctx context.Context, event zlog.Event) error {
+var auditSink = zlog.NewSink("audit", func(ctx context.Context, event zlog.Log) error {
 	// In production, write to immutable audit log
 	if event.Signal == USER_LOGIN || event.Signal == ORDER_PLACED || event.Signal == PAYMENT_PROCESSED {
 		fmt.Printf("📝 [Audit] %s at %s\n", event.Signal, event.Time.Format(time.RFC3339))
@@ -184,12 +184,12 @@ func setupPipeline() {
 		PAYMENT_PROCESSED, ORDER_SHIPPED,
 		CACHE_HIT, CACHE_MISS, API_CALLED, RATE_LIMITED,
 	}
-	
+
 	for _, signal := range signals {
 		zlog.RouteSignal(signal, correlationSink)
 		zlog.RouteSignal(signal, metricsSink)
 	}
-	
+
 	// Business events to analytics
 	businessSignals := []zlog.Signal{
 		PRODUCT_VIEWED, PRODUCT_SEARCHED, CART_UPDATED,
@@ -198,23 +198,23 @@ func setupPipeline() {
 	for _, signal := range businessSignals {
 		zlog.RouteSignal(signal, businessAnalyticsSink)
 	}
-	
+
 	// Critical events to alerting
 	zlog.RouteSignal(RATE_LIMITED, alertingSink)
-	
+
 	// Compliance events to audit
 	zlog.RouteSignal(USER_LOGIN, auditSink)
 	zlog.RouteSignal(ORDER_PLACED, auditSink)
 	zlog.RouteSignal(PAYMENT_PROCESSED, auditSink)
-	
+
 	// Standard error logging
 	zlog.EnableStandardLogging(zlog.INFO)
 	zlog.RouteSignal(zlog.ERROR, alertingSink)
-	
+
 	// File sink for everything (with rotation)
 	fileSink := zlog.NewRotatingFileSink("events.log", 10*1024*1024, 5).
 		WithAsync() // Don't block on file I/O
-		
+
 	for _, signal := range signals {
 		zlog.RouteSignal(signal, fileSink)
 	}
@@ -228,7 +228,7 @@ func simulateUserSession(userID, sessionID string) {
 		zlog.String("session_id", sessionID),
 		zlog.Time("login_time", time.Now()),
 	)
-	
+
 	// Search for products
 	searches := []string{"laptop", "gaming laptop", "laptop accessories"}
 	for _, query := range searches {
@@ -238,7 +238,7 @@ func simulateUserSession(userID, sessionID string) {
 			zlog.Int("results_count", rand.Intn(50)+10),
 		)
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Simulate cache behavior
 		if rand.Float32() > 0.3 {
 			zlog.Emit(CACHE_HIT, "Search results from cache",
@@ -252,14 +252,17 @@ func simulateUserSession(userID, sessionID string) {
 			)
 		}
 	}
-	
+
 	// View products
-	products := []struct{ id, name string; price float64 }{
+	products := []struct {
+		id, name string
+		price    float64
+	}{
 		{"prod-1", "Gaming Laptop Pro", 1299.99},
 		{"prod-2", "Wireless Mouse", 59.99},
 		{"prod-3", "Mechanical Keyboard", 149.99},
 	}
-	
+
 	for _, product := range products {
 		zlog.Emit(PRODUCT_VIEWED, "Product viewed",
 			zlog.String("session_id", sessionID),
@@ -270,7 +273,7 @@ func simulateUserSession(userID, sessionID string) {
 		)
 		time.Sleep(200 * time.Millisecond)
 	}
-	
+
 	// Update cart
 	cartValue := 0.0
 	for i, product := range products[:rand.Intn(len(products))+1] {
@@ -283,14 +286,14 @@ func simulateUserSession(userID, sessionID string) {
 		)
 		time.Sleep(150 * time.Millisecond)
 	}
-	
+
 	// Checkout process
 	if cartValue > 0 {
 		zlog.Emit(CHECKOUT_STARTED, "Checkout initiated",
 			zlog.String("session_id", sessionID),
 			zlog.Float64("cart_value", cartValue),
 		)
-		
+
 		// Place order
 		orderID := fmt.Sprintf("ORD-%06d", rand.Intn(1000000))
 		zlog.Emit(ORDER_PLACED, "Order placed",
@@ -299,7 +302,7 @@ func simulateUserSession(userID, sessionID string) {
 			zlog.Float64("order_total", cartValue),
 			zlog.String("user_id", userID),
 		)
-		
+
 		// Process payment
 		zlog.Emit(PAYMENT_PROCESSED, "Payment successful",
 			zlog.String("session_id", sessionID),
@@ -313,18 +316,18 @@ func simulateUserSession(userID, sessionID string) {
 // simulateAPITraffic generates API events.
 func simulateAPITraffic() {
 	endpoints := []string{"/api/products", "/api/users", "/api/orders", "/api/search"}
-	
+
 	for i := 0; i < 20; i++ {
 		endpoint := endpoints[rand.Intn(len(endpoints))]
 		responseTime := time.Duration(rand.Intn(200)+50) * time.Millisecond
-		
+
 		zlog.Emit(API_CALLED, "API request",
 			zlog.String("endpoint", endpoint),
 			zlog.String("method", "GET"),
 			zlog.Duration("response_time", responseTime),
 			zlog.Int("status", 200),
 		)
-		
+
 		// Simulate rate limiting
 		if i > 15 {
 			zlog.Emit(RATE_LIMITED, "Rate limit exceeded",
@@ -333,7 +336,7 @@ func simulateAPITraffic() {
 				zlog.Int("requests_count", i),
 			)
 		}
-		
+
 		time.Sleep(50 * time.Millisecond)
 	}
 }
@@ -342,14 +345,14 @@ func main() {
 	fmt.Println("=== Event Pipeline Example ===")
 	fmt.Println("Demonstrating zlog as application event bus")
 	fmt.Println()
-	
+
 	// Set up the complete pipeline
 	setupPipeline()
-	
+
 	// Simulate multiple user sessions
 	fmt.Println("--- Simulating User Sessions ---")
 	var wg sync.WaitGroup
-	
+
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -360,14 +363,14 @@ func main() {
 		}(i)
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	// Simulate API traffic
 	fmt.Println("\n--- Simulating API Traffic ---")
 	simulateAPITraffic()
-	
+
 	wg.Wait()
 	time.Sleep(500 * time.Millisecond) // Let async sinks finish
-	
+
 	// Show session correlation
 	fmt.Println("\n--- Session Correlation Example ---")
 	// Pick a session and show all events
@@ -384,7 +387,7 @@ func main() {
 			break
 		}
 	}
-	
+
 	// Show metrics summary
 	fmt.Println("\n--- Metrics Summary ---")
 	stats := metrics.GetStats()
@@ -394,17 +397,17 @@ func main() {
 			fmt.Printf("  %s: %d\n", signal, c)
 		}
 	}
-	
+
 	fmt.Println("\nGauges:")
 	for name, value := range stats {
 		if v, ok := value.(float64); ok {
 			fmt.Printf("  %s: %.2f\n", name, v)
 		}
 	}
-	
+
 	// Clean up
 	_ = os.Remove("events.log")
-	
+
 	fmt.Println("\n=== Example Complete ===")
 	fmt.Println("Demonstrated:")
 	fmt.Println("- Event correlation across sessions")

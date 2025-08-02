@@ -12,9 +12,9 @@ import (
 func TestSinkWithAsync(t *testing.T) {
 	t.Run("processes events asynchronously", func(t *testing.T) {
 		var wg sync.WaitGroup
-		processed := make(chan Event, 1)
+		processed := make(chan Log, 1)
 
-		handler := func(_ context.Context, event Event) error {
+		handler := func(_ context.Context, event Log) error {
 			defer wg.Done()
 			processed <- event
 			return nil
@@ -56,7 +56,7 @@ func TestSinkWithAsync(t *testing.T) {
 		var wg sync.WaitGroup
 		started := make(chan bool, 1)
 
-		handler := func(_ context.Context, _ Event) error {
+		handler := func(_ context.Context, _ Log) error {
 			defer wg.Done()
 			started <- true
 			time.Sleep(100 * time.Millisecond) // Slow operation
@@ -95,7 +95,7 @@ func TestSinkWithAsync(t *testing.T) {
 	t.Run("errors don't propagate back", func(t *testing.T) {
 		handlerCalled := make(chan bool, 1)
 
-		handler := func(_ context.Context, _ Event) error {
+		handler := func(_ context.Context, _ Log) error {
 			handlerCalled <- true
 			return errors.New("handler error")
 		}
@@ -124,7 +124,7 @@ func TestSinkWithAsync(t *testing.T) {
 		var maxActive int32
 		var wg sync.WaitGroup
 
-		handler := func(_ context.Context, _ Event) error {
+		handler := func(_ context.Context, _ Log) error {
 			defer wg.Done()
 
 			// Increment active count
@@ -172,7 +172,7 @@ func TestSinkWithAsync(t *testing.T) {
 	t.Run("context cancellation doesn't affect async processing", func(t *testing.T) {
 		processed := make(chan bool, 1)
 
-		handler := func(ctx context.Context, _ Event) error {
+		handler := func(ctx context.Context, _ Log) error {
 			// Sleep to ensure parent context would be canceled
 			time.Sleep(50 * time.Millisecond)
 
@@ -212,7 +212,7 @@ func TestSinkWithAsync(t *testing.T) {
 		var callCount int32
 		processed := make(chan bool, 1)
 
-		handler := func(_ context.Context, _ Event) error {
+		handler := func(_ context.Context, _ Log) error {
 			count := atomic.AddInt32(&callCount, 1)
 			if count < 2 {
 				return errors.New("simulated failure")
@@ -259,7 +259,7 @@ func TestSinkWithAsync(t *testing.T) {
 	t.Run("order of async matters", func(t *testing.T) {
 		var handlerCompleted int32
 
-		slowHandler := func(ctx context.Context, _ Event) error {
+		slowHandler := func(ctx context.Context, _ Log) error {
 			select {
 			case <-time.After(100 * time.Millisecond):
 				atomic.StoreInt32(&handlerCompleted, 1)

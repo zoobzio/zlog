@@ -19,12 +19,12 @@ import (
 // These represent actual business events, not severity levels.
 const (
 	// User lifecycle events
-	USER_REGISTERED   = zlog.Signal("USER_REGISTERED")
-	USER_LOGIN        = zlog.Signal("USER_LOGIN")
-	USER_LOGOUT       = zlog.Signal("USER_LOGOUT")
-	PASSWORD_CHANGED  = zlog.Signal("PASSWORD_CHANGED")
+	USER_REGISTERED  = zlog.Signal("USER_REGISTERED")
+	USER_LOGIN       = zlog.Signal("USER_LOGIN")
+	USER_LOGOUT      = zlog.Signal("USER_LOGOUT")
+	PASSWORD_CHANGED = zlog.Signal("PASSWORD_CHANGED")
 
-	// Commerce events  
+	// Commerce events
 	PRODUCT_VIEWED    = zlog.Signal("PRODUCT_VIEWED")
 	CART_UPDATED      = zlog.Signal("CART_UPDATED")
 	ORDER_PLACED      = zlog.Signal("ORDER_PLACED")
@@ -33,14 +33,14 @@ const (
 	ORDER_SHIPPED     = zlog.Signal("ORDER_SHIPPED")
 
 	// System events
-	CACHE_HIT         = zlog.Signal("CACHE_HIT")
-	CACHE_MISS        = zlog.Signal("CACHE_MISS")
-	API_RATE_LIMITED  = zlog.Signal("API_RATE_LIMITED")
-	FRAUD_DETECTED    = zlog.Signal("FRAUD_DETECTED")
+	CACHE_HIT        = zlog.Signal("CACHE_HIT")
+	CACHE_MISS       = zlog.Signal("CACHE_MISS")
+	API_RATE_LIMITED = zlog.Signal("API_RATE_LIMITED")
+	FRAUD_DETECTED   = zlog.Signal("FRAUD_DETECTED")
 )
 
 // auditSink handles events that need audit trail.
-var auditSink = zlog.NewSink("audit", func(ctx context.Context, event zlog.Event) error {
+var auditSink = zlog.NewSink("audit", func(ctx context.Context, event zlog.Log) error {
 	// In a real app, this would write to an audit log file or database
 	// Notice how we can access context values for distributed tracing
 	traceID := ctx.Value("trace_id")
@@ -53,11 +53,11 @@ var auditSink = zlog.NewSink("audit", func(ctx context.Context, event zlog.Event
 })
 
 // metricsSink extracts metrics from events.
-var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.Event) error {
+var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.Log) error {
 	// In a real app, this would send to Prometheus, StatsD, etc.
 	switch event.Signal {
 	case ORDER_PLACED, PAYMENT_PROCESSED:
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			if field.Key == "amount" {
 				fmt.Printf("[METRICS] %s.amount: %.2f\n", event.Signal, field.Value)
 			}
@@ -69,13 +69,13 @@ var metricsSink = zlog.NewSink("metrics", func(ctx context.Context, event zlog.E
 })
 
 // alertSink handles critical events that need immediate attention.
-var alertSink = zlog.NewSink("alerts", func(ctx context.Context, event zlog.Event) error {
+var alertSink = zlog.NewSink("alerts", func(ctx context.Context, event zlog.Log) error {
 	// In a real app, this would send to PagerDuty, Slack, etc.
 	fmt.Printf("[ALERT] ⚠️  %s: %s\n", event.Signal, event.Message)
-	
+
 	// Show all fields for context
 	data := make(map[string]interface{})
-	for _, field := range event.Fields {
+	for _, field := range event.Data {
 		data[field.Key] = field.Value
 	}
 	jsonData, _ := json.MarshalIndent(data, "         ", "  ")
@@ -87,14 +87,14 @@ var alertSink = zlog.NewSink("alerts", func(ctx context.Context, event zlog.Even
 var analyticsFileSink = zlog.NewRotatingFileSink(
 	"analytics.log",
 	10*1024*1024, // 10MB files
-	3,             // Keep 3 files
+	3,            // Keep 3 files
 ).WithAsync() // Don't block on file I/O
 
 // setupRouting configures which signals go to which sinks.
 func setupRouting() {
 	// User events go to audit trail (using variadic RouteSignal)
 	zlog.RouteSignal(USER_REGISTERED, auditSink)
-	zlog.RouteSignal(USER_LOGIN, auditSink)  
+	zlog.RouteSignal(USER_LOGIN, auditSink)
 	zlog.RouteSignal(USER_LOGOUT, auditSink)
 	zlog.RouteSignal(PASSWORD_CHANGED, auditSink)
 
@@ -130,7 +130,7 @@ func simulateUserJourney(userID string) {
 	traceID := fmt.Sprintf("trace-%d", rand.Intn(10000))
 	sessionCtx := context.WithValue(context.Background(), "trace_id", traceID)
 	sessionCtx = context.WithValue(sessionCtx, "user_id", userID)
-	
+
 	// Set context for this goroutine - all subsequent Emit calls will use this context
 	zlog.SetContext(sessionCtx)
 	defer zlog.ClearContext()
@@ -164,7 +164,7 @@ func simulateUserJourney(userID string) {
 	// Place order
 	orderID := fmt.Sprintf("ORD-%d", rand.Intn(10000))
 	amount := float64(rand.Intn(500)) + 50.99
-	
+
 	zlog.Emit(ORDER_PLACED, "Order placed",
 		zlog.String("user_id", userID),
 		zlog.String("order_id", orderID),
@@ -193,17 +193,17 @@ func simulateUserJourney(userID string) {
 // simulateCacheOperations shows system-level events.
 func simulateCacheOperations() {
 	cacheKeys := []string{"user:123", "product:laptop", "session:abc", "config:app"}
-	
+
 	// Generate more events to show sampling effect
 	fmt.Printf("Generating 50 cache events (70%% hits, 30%% misses)...\n")
 	fmt.Printf("Cache hits are sampled at 10%%, misses are not sampled\n")
-	
+
 	hitCount := 0
 	missCount := 0
-	
+
 	for i := 0; i < 50; i++ {
 		key := cacheKeys[rand.Intn(len(cacheKeys))]
-		
+
 		if rand.Float32() > 0.3 { // 70% hit rate
 			hitCount++
 			zlog.Emit(CACHE_HIT, "Cache hit",
@@ -212,18 +212,18 @@ func simulateCacheOperations() {
 			)
 		} else {
 			missCount++
-			zlog.Emit(CACHE_MISS, "Cache miss", 
+			zlog.Emit(CACHE_MISS, "Cache miss",
 				zlog.String("key", key),
 				zlog.Duration("fetch_time", time.Duration(rand.Intn(100))*time.Millisecond),
 			)
 		}
-		
+
 		if i < 10 {
 			time.Sleep(50 * time.Millisecond) // Slow down first few for visibility
 		}
 	}
-	
-	fmt.Printf("Generated %d hits (expecting ~%d in metrics) and %d misses\n", 
+
+	fmt.Printf("Generated %d hits (expecting ~%d in metrics) and %d misses\n",
 		hitCount, hitCount/10, missCount)
 }
 
@@ -254,7 +254,7 @@ func main() {
 	simulateUserJourney("user123")
 	time.Sleep(500 * time.Millisecond)
 
-	fmt.Println("\n--- Cache Operations ---")  
+	fmt.Println("\n--- Cache Operations ---")
 	simulateCacheOperations()
 
 	fmt.Println("\n--- Security Event ---")

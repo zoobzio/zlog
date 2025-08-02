@@ -9,7 +9,7 @@ import (
 func TestNewSink(t *testing.T) {
 	// Test creating a simple sink
 	called := false
-	sink := NewSink("test-sink", func(_ context.Context, _ Event) error {
+	sink := NewSink("test-sink", func(_ context.Context, _ Log) error {
 		called = true
 		return nil
 	})
@@ -31,7 +31,7 @@ func TestNewSink(t *testing.T) {
 func TestNewSinkError(t *testing.T) {
 	// Test sink that returns an error
 	expectedErr := errors.New("test error")
-	sink := NewSink("error-sink", func(_ context.Context, _ Event) error {
+	sink := NewSink("error-sink", func(_ context.Context, _ Log) error {
 		return expectedErr
 	})
 

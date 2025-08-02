@@ -32,14 +32,14 @@
 //	    FRAUD_DETECTED   = zlog.Signal("FRAUD_DETECTED")
 //	)
 //
-//	// Route payment events to audit sink
+//	// Hook payment events to audit sink
 //	auditSink := zlog.NewSink("audit", handleAuditEvent)
-//	zlog.RouteSignal(PAYMENT_RECEIVED, auditSink)
+//	zlog.Hook(PAYMENT_RECEIVED, auditSink)
 //
-//	// Route fraud to multiple destinations
-//	zlog.RouteSignal(FRAUD_DETECTED, auditSink)
-//	zlog.RouteSignal(FRAUD_DETECTED, alertSink)
-//	zlog.RouteSignal(FRAUD_DETECTED, metricsSink)
+//	// Hook fraud to multiple destinations
+//	zlog.Hook(FRAUD_DETECTED, auditSink)
+//	zlog.Hook(FRAUD_DETECTED, alertSink)
+//	zlog.Hook(FRAUD_DETECTED, metricsSink)
 //
 //	// Emit domain events
 //	zlog.Emit(PAYMENT_RECEIVED, "Payment processed",
@@ -119,7 +119,7 @@ func Emit(signal Signal, msg string, fields ...Field) {
 		}
 	}
 
-	dispatch.process(event)
+	defaultLogger.Process(event)
 }
 
 // Debug emits a debug-level event for development and troubleshooting.

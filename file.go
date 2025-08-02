@@ -155,12 +155,12 @@ func NewRotatingFileSink(filename string, maxSize int64, maxFiles int) *Sink {
 	writer, err := newRotatingFileWriter(filename, maxSize, maxFiles)
 	if err != nil {
 		// Return a sink that always fails with the initialization error
-		return NewSink("rotating-file-failed", func(_ context.Context, _ Event) error {
+		return NewSink("rotating-file-failed", func(_ context.Context, _ Log) error {
 			return fmt.Errorf("rotating file sink initialization failed: %w", err)
 		})
 	}
 
-	return NewSink("rotating-file", func(_ context.Context, event Event) error {
+	return NewSink("rotating-file", func(_ context.Context, event Log) error {
 		// Build JSON structure (same format as stderr sink)
 		entry := map[string]interface{}{
 			"time":    event.Time.Format(time.RFC3339Nano),
@@ -174,7 +174,7 @@ func NewRotatingFileSink(filename string, maxSize int64, maxFiles int) *Sink {
 		}
 
 		// Add all structured fields as top-level JSON properties
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			entry[field.Key] = field.Value
 		}
 

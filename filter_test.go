@@ -9,7 +9,7 @@ import (
 func TestSinkWithFilter(t *testing.T) {
 	tests := []struct {
 		name          string
-		filterFunc    func(context.Context, Event) bool
+		filterFunc    func(context.Context, Log) bool
 		signal        Signal
 		message       string
 		fields        []Field
@@ -18,7 +18,7 @@ func TestSinkWithFilter(t *testing.T) {
 	}{
 		{
 			name: "filter allows event through",
-			filterFunc: func(_ context.Context, e Event) bool {
+			filterFunc: func(_ context.Context, e Log) bool {
 				return e.Signal == "TEST"
 			},
 			signal:        "TEST",
@@ -29,7 +29,7 @@ func TestSinkWithFilter(t *testing.T) {
 		},
 		{
 			name: "filter blocks event",
-			filterFunc: func(_ context.Context, e Event) bool {
+			filterFunc: func(_ context.Context, e Log) bool {
 				return e.Signal == "ALLOWED"
 			},
 			signal:        "BLOCKED",
@@ -40,8 +40,8 @@ func TestSinkWithFilter(t *testing.T) {
 		},
 		{
 			name: "filter by field value allows",
-			filterFunc: func(_ context.Context, e Event) bool {
-				for _, field := range e.Fields {
+			filterFunc: func(_ context.Context, e Log) bool {
+				for _, field := range e.Data {
 					if field.Key == "level" && field.Value == "high" {
 						return true
 					}
@@ -56,8 +56,8 @@ func TestSinkWithFilter(t *testing.T) {
 		},
 		{
 			name: "filter by field value blocks",
-			filterFunc: func(_ context.Context, e Event) bool {
-				for _, field := range e.Fields {
+			filterFunc: func(_ context.Context, e Log) bool {
+				for _, field := range e.Data {
 					if field.Key == "level" && field.Value == "high" {
 						return true
 					}
@@ -72,8 +72,8 @@ func TestSinkWithFilter(t *testing.T) {
 		},
 		{
 			name: "filter by numeric field value",
-			filterFunc: func(_ context.Context, e Event) bool {
-				for _, field := range e.Fields {
+			filterFunc: func(_ context.Context, e Log) bool {
+				for _, field := range e.Data {
 					if field.Key == "amount" {
 						if amount, ok := field.Value.(float64); ok {
 							return amount > 1000.0
@@ -90,8 +90,8 @@ func TestSinkWithFilter(t *testing.T) {
 		},
 		{
 			name: "filter by numeric field value blocks small amount",
-			filterFunc: func(_ context.Context, e Event) bool {
-				for _, field := range e.Fields {
+			filterFunc: func(_ context.Context, e Log) bool {
+				for _, field := range e.Data {
 					if field.Key == "amount" {
 						if amount, ok := field.Value.(float64); ok {
 							return amount > 1000.0
@@ -111,9 +111,9 @@ func TestSinkWithFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var handlerCalled bool
-			var receivedEvent Event
+			var receivedEvent Log
 
-			handler := func(_ context.Context, event Event) error {
+			handler := func(_ context.Context, event Log) error {
 				handlerCalled = true
 				receivedEvent = event
 				return nil
@@ -149,8 +149,8 @@ func TestSinkWithFilter(t *testing.T) {
 				if receivedEvent.Message != event.Message {
 					t.Errorf("message mismatch, got %s, want %s", receivedEvent.Message, event.Message)
 				}
-				if len(receivedEvent.Fields) != len(event.Fields) {
-					t.Errorf("field count mismatch, got %d, want %d", len(receivedEvent.Fields), len(event.Fields))
+				if len(receivedEvent.Data) != len(event.Data) {
+					t.Errorf("field count mismatch, got %d, want %d", len(receivedEvent.Data), len(event.Data))
 				}
 			}
 		})
@@ -160,11 +160,11 @@ func TestSinkWithFilter(t *testing.T) {
 func TestSinkWithFilterHandlerError(t *testing.T) {
 	// Test that handler errors are still propagated when filter allows event
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		return errors.New("handler error")
 	}
 
-	sink := NewSink("test", handler).WithFilter(func(_ context.Context, _ Event) bool {
+	sink := NewSink("test", handler).WithFilter(func(_ context.Context, _ Log) bool {
 		return true // Allow all events
 	})
 
@@ -181,7 +181,7 @@ func TestSinkWithFilterHandlerError(t *testing.T) {
 func TestSinkWithFilterContextCancellation(t *testing.T) {
 	var filterCalled, handlerCalled bool
 
-	filterFunc := func(ctx context.Context, _ Event) bool {
+	filterFunc := func(ctx context.Context, _ Log) bool {
 		filterCalled = true
 		// Check if context is canceled
 		if ctx.Err() != nil {
@@ -190,7 +190,7 @@ func TestSinkWithFilterContextCancellation(t *testing.T) {
 		return true
 	}
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		handlerCalled = true
 		return nil
 	}
@@ -226,20 +226,20 @@ func TestSinkWithFilterChaining(t *testing.T) {
 
 	var calls []string
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "handler")
 		return nil
 	}
 
 	// Chain multiple filters
 	sink := NewSink("test", handler).
-		WithFilter(func(_ context.Context, e Event) bool {
+		WithFilter(func(_ context.Context, e Log) bool {
 			calls = append(calls, "filter1")
 			return e.Signal == "ALLOWED"
 		}).
-		WithFilter(func(_ context.Context, e Event) bool {
+		WithFilter(func(_ context.Context, e Log) bool {
 			calls = append(calls, "filter2")
-			for _, field := range e.Fields {
+			for _, field := range e.Data {
 				if field.Key == "pass" && field.Value == true {
 					return true
 				}
@@ -271,17 +271,17 @@ func TestSinkWithFilterChaining(t *testing.T) {
 func TestSinkWithFilterMultipleConditions(t *testing.T) {
 	// Test complex filter with multiple conditions
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		return nil
 	}
 
 	// Complex filter: ERROR signal AND amount > 100
-	complexFilter := func(_ context.Context, e Event) bool {
+	complexFilter := func(_ context.Context, e Log) bool {
 		if e.Signal != "ERROR" {
 			return false
 		}
 
-		for _, field := range e.Fields {
+		for _, field := range e.Data {
 			if field.Key == "amount" {
 				if amount, ok := field.Value.(float64); ok {
 					return amount > 100.0
@@ -330,7 +330,7 @@ func TestSinkWithFilterMultipleConditions(t *testing.T) {
 			var handlerCalled bool
 
 			// Reset handler for each test
-			testSink := NewSink("test", func(_ context.Context, _ Event) error {
+			testSink := NewSink("test", func(_ context.Context, _ Log) error {
 				handlerCalled = true
 				return nil
 			}).WithFilter(complexFilter)
@@ -358,7 +358,7 @@ func TestSinkWithFilterCombinedWithOtherAdapters(t *testing.T) {
 
 	var callCount int
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		callCount++
 		if callCount == 1 {
 			return errors.New("first attempt fails")
@@ -367,7 +367,7 @@ func TestSinkWithFilterCombinedWithOtherAdapters(t *testing.T) {
 	}
 
 	// Create filter function for reuse
-	errorOnlyFilter := func(_ context.Context, e Event) bool {
+	errorOnlyFilter := func(_ context.Context, e Log) bool {
 		return e.Signal == "ERROR"
 	}
 

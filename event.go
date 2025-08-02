@@ -12,13 +12,39 @@ type CallerInfo struct {
 }
 
 // Event represents an immutable signal event that flows through sinks.
-type Event struct {
+// The generic type T allows for different data payloads:
+//   - Log for the global logger with structured fields
+//   - Event[Order] for typed loggers with domain objects
+type Event[T any] struct {
 	Time    time.Time
-	Caller  CallerInfo
-	Signal  Signal
+	Data    T
 	Message string
-	Fields  []Field
+	Signal  Signal
+	Caller  CallerInfo
 }
+
+// Clone creates a copy of the Event.
+// This implements the pipz.Cloner interface for use with pipz pipelines.
+func (e Event[T]) Clone() Event[T] {
+	newEvent := Event[T]{
+		Time:    e.Time,
+		Caller:  e.Caller,
+		Signal:  e.Signal,
+		Message: e.Message,
+		Data:    e.Data,
+	}
+
+	// If T implements Clone() method, use it for deep copying
+	if cloner, ok := any(e.Data).(interface{ Clone() T }); ok {
+		newEvent.Data = cloner.Clone()
+	}
+
+	return newEvent
+}
+
+// Log is the standard event type used by the global logger.
+// It's an alias for Event[Fields] to provide a cleaner API.
+type Log = Event[Fields]
 
 // NewEvent creates a new Event with the current timestamp.
 //
@@ -27,31 +53,11 @@ type Event struct {
 // events directly.
 //
 // The fields parameter can be nil if no structured data is needed.
-func NewEvent(signal Signal, msg string, fields []Field) Event {
-	return Event{
+func NewEvent(signal Signal, msg string, fields []Field) Log {
+	return Log{
 		Time:    time.Now(),
 		Signal:  signal,
 		Message: msg,
-		Fields:  fields,
-	}
-}
-
-// Clone creates a deep copy of the event for safe concurrent processing.
-//
-// This method satisfies the pipz.Cloner interface, allowing events to be
-// processed by multiple sinks concurrently. Each sink receives its own copy,
-// preventing any interference between sinks.
-//
-// The clone includes a copy of the Fields slice to ensure complete isolation.
-func (e Event) Clone() Event {
-	// Copy the fields slice to ensure isolation
-	fieldsCopy := make([]Field, len(e.Fields))
-	copy(fieldsCopy, e.Fields)
-
-	return Event{
-		Time:    e.Time,    // time.Time is a value type
-		Signal:  e.Signal,  // Signal (string) is immutable
-		Message: e.Message, // strings are immutable
-		Fields:  fieldsCopy,
+		Data:    Fields(fields),
 	}
 }

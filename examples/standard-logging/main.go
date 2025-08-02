@@ -109,6 +109,16 @@ func main() {
 	// This routes DEBUG, INFO, WARN, ERROR, and FATAL to stderr as JSON
 	zlog.EnableStandardLogging(zlog.INFO)
 
+	// Example: In development, also route ALL events to console
+	// This demonstrates how RouteAll can be used for cross-cutting concerns
+	fmt.Println("--- Demonstrating RouteAll with ConsoleJSONSink ---")
+	fmt.Println("Adding ConsoleJSONSink to stdout that will see ALL events")
+	fmt.Println("(Standard logging still goes to stderr, dev logging to stdout)")
+
+	// Use the new ConsoleJSONSink that outputs to stdout
+	// This way we can distinguish between standard logging (stderr) and dev logging (stdout)
+	zlog.RouteAll(zlog.ConsoleJSONSink(true))
+
 	// Show application startup sequence
 	fmt.Println("--- Application Startup ---")
 	simulateStartupSequence()
@@ -144,6 +154,27 @@ func main() {
 	// Fatal would exit the application - commented out for demo
 	// zlog.Fatal("Unrecoverable error", zlog.Err(errors.New("database connection lost")))
 
+	// Demonstrate custom signals that ONLY appear via RouteAll
+	fmt.Println("\n--- Custom Signal Examples ---")
+	fmt.Println("These custom signals will ONLY appear in stdout (ConsoleJSONSink)")
+
+	// Custom business signals
+	const PAYMENT_RECEIVED = zlog.Signal("PAYMENT_RECEIVED")
+	const USER_REGISTERED = zlog.Signal("USER_REGISTERED")
+
+	zlog.Emit(PAYMENT_RECEIVED, "Payment processed successfully",
+		zlog.String("user_id", "usr_123"),
+		zlog.Float64("amount", 99.99),
+		zlog.String("currency", "USD"),
+	)
+
+	zlog.Emit(USER_REGISTERED, "New user registration",
+		zlog.String("user_id", "usr_456"),
+		zlog.String("email", "newuser@example.com"),
+		zlog.String("plan", "premium"),
+	)
+
 	fmt.Println("\n=== Example Complete ===")
 	fmt.Println("Check the JSON output above to see structured logging in action!")
+	fmt.Println("Notice: Custom signals only appear in stdout (RouteAll), not stderr (StandardLogging)")
 }

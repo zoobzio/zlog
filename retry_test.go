@@ -63,7 +63,7 @@ func TestSinkWithRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var callCount int
 
-			handler := func(_ context.Context, _ Event) error {
+			handler := func(_ context.Context, _ Log) error {
 				callCount++
 				if callCount <= tt.failCount {
 					return errors.New("simulated failure")
@@ -98,7 +98,7 @@ func TestSinkWithRetry(t *testing.T) {
 func TestSinkWithRetryContextCancellation(t *testing.T) {
 	var callCount int
 
-	handler := func(ctx context.Context, _ Event) error {
+	handler := func(ctx context.Context, _ Log) error {
 		callCount++
 		// Check if context is canceled on each call
 		if ctx.Err() != nil {
@@ -135,7 +135,7 @@ func TestSinkWithRetryContextCancellation(t *testing.T) {
 func TestSinkWithRetryTimeout(t *testing.T) {
 	var callCount int
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		callCount++
 		// Simulate a slow operation
 		time.Sleep(50 * time.Millisecond)
@@ -176,7 +176,7 @@ func TestSinkWithRetryChaining(t *testing.T) {
 
 	var callCount int
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		callCount++
 		if callCount == 1 {
 			return errors.New("fail once")
@@ -206,9 +206,9 @@ func TestSinkWithRetryChaining(t *testing.T) {
 }
 
 func TestSinkWithRetryPreservesEventData(t *testing.T) {
-	var receivedEvents []Event
+	var receivedEvents []Log
 
-	handler := func(_ context.Context, event Event) error {
+	handler := func(_ context.Context, event Log) error {
 		receivedEvents = append(receivedEvents, event)
 		if len(receivedEvents) < 3 {
 			return errors.New("fail first two attempts")
@@ -241,8 +241,8 @@ func TestSinkWithRetryPreservesEventData(t *testing.T) {
 		if received.Message != originalEvent.Message {
 			t.Errorf("event %d: message mismatch, got %s, want %s", i, received.Message, originalEvent.Message)
 		}
-		if len(received.Fields) != len(originalEvent.Fields) {
-			t.Errorf("event %d: field count mismatch, got %d, want %d", i, len(received.Fields), len(originalEvent.Fields))
+		if len(received.Data) != len(originalEvent.Data) {
+			t.Errorf("event %d: field count mismatch, got %d, want %d", i, len(received.Data), len(originalEvent.Data))
 		}
 	}
 }

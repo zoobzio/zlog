@@ -65,7 +65,7 @@ func TestSinkWithSampling(t *testing.T) {
 			var processedCount int64
 
 			// Create a sink that counts processed events
-			countingSink := NewSink("counter", func(_ context.Context, _ Event) error {
+			countingSink := NewSink("counter", func(_ context.Context, _ Log) error {
 				atomic.AddInt64(&processedCount, 1)
 				return nil
 			})
@@ -123,7 +123,7 @@ func TestSinkWithProbabilisticSampling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var processedCount int64
 
-			countingSink := NewSink("counter", func(_ context.Context, _ Event) error {
+			countingSink := NewSink("counter", func(_ context.Context, _ Log) error {
 				atomic.AddInt64(&processedCount, 1)
 				return nil
 			})
@@ -153,12 +153,12 @@ func TestSamplingDeterminism(t *testing.T) {
 	// Test that deterministic sampling produces consistent results
 	var count1, count2 int64
 
-	sink1 := NewSink("counter1", func(_ context.Context, _ Event) error {
+	sink1 := NewSink("counter1", func(_ context.Context, _ Log) error {
 		atomic.AddInt64(&count1, 1)
 		return nil
 	}).WithSampling(0.2) // 20% sampling
 
-	sink2 := NewSink("counter2", func(_ context.Context, _ Event) error {
+	sink2 := NewSink("counter2", func(_ context.Context, _ Log) error {
 		atomic.AddInt64(&count2, 1)
 		return nil
 	}).WithSampling(0.2) // Same 20% sampling
@@ -185,7 +185,7 @@ func TestSamplingWithOtherAdapters(t *testing.T) {
 	var errorCount int64
 
 	// Create a sink that fails 50% of the time
-	unreliableSink := NewSink("unreliable", func(_ context.Context, _ Event) error {
+	unreliableSink := NewSink("unreliable", func(_ context.Context, _ Log) error {
 		count := atomic.AddInt64(&processedCount, 1)
 		if count%2 == 0 {
 			atomic.AddInt64(&errorCount, 1)
@@ -217,7 +217,7 @@ func TestSamplingWithOtherAdapters(t *testing.T) {
 }
 
 func BenchmarkSampling(b *testing.B) {
-	sink := NewSink("bench", func(_ context.Context, _ Event) error {
+	sink := NewSink("bench", func(_ context.Context, _ Log) error {
 		return nil
 	})
 

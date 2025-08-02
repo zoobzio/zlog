@@ -34,7 +34,7 @@ func (s *Sink) WithSampling(rate float64) *Sink {
 	// Clamp rate to valid range
 	if rate <= 0 {
 		// Return a sink that drops everything
-		return NewSink("sampling-drop-all", func(_ context.Context, _ Event) error {
+		return NewSink("sampling-drop-all", func(_ context.Context, _ Log) error {
 			return nil
 		})
 	}
@@ -46,7 +46,7 @@ func (s *Sink) WithSampling(rate float64) *Sink {
 	// Use a counter for deterministic sampling
 	var counter uint64
 
-	return s.WithFilter(func(_ context.Context, _ Event) bool {
+	return s.WithFilter(func(_ context.Context, _ Log) bool {
 		// Increment counter atomically
 		count := atomic.AddUint64(&counter, 1)
 
@@ -75,7 +75,7 @@ func (s *Sink) WithSampling(rate float64) *Sink {
 func (s *Sink) WithProbabilisticSampling(rate float64) *Sink {
 	// Clamp rate to valid range
 	if rate <= 0 {
-		return NewSink("probabilistic-drop-all", func(_ context.Context, _ Event) error {
+		return NewSink("probabilistic-drop-all", func(_ context.Context, _ Log) error {
 			return nil
 		})
 	}
@@ -83,7 +83,7 @@ func (s *Sink) WithProbabilisticSampling(rate float64) *Sink {
 		return s
 	}
 
-	return s.WithFilter(func(_ context.Context, _ Event) bool {
+	return s.WithFilter(func(_ context.Context, _ Log) bool {
 		return rand.Float64() < rate //nolint:gosec // Weak random is acceptable for sampling
 	})
 }

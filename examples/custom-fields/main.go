@@ -23,15 +23,15 @@ import (
 func RedactedString(key, value string) zlog.Field {
 	// Detect and redact common patterns
 	redacted := value
-	
+
 	// Credit card pattern (simplified)
 	if regexp.MustCompile(`\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}`).MatchString(value) {
 		// Show first and last 4 digits
 		digits := regexp.MustCompile(`\d`).FindAllString(value, -1)
 		if len(digits) >= 8 {
-			redacted = digits[0] + digits[1] + digits[2] + digits[3] + 
-				"********" + 
-				digits[len(digits)-4] + digits[len(digits)-3] + 
+			redacted = digits[0] + digits[1] + digits[2] + digits[3] +
+				"********" +
+				digits[len(digits)-4] + digits[len(digits)-3] +
 				digits[len(digits)-2] + digits[len(digits)-1]
 		}
 	} else if regexp.MustCompile(`\d{3}-\d{2}-\d{4}`).MatchString(value) {
@@ -41,7 +41,7 @@ func RedactedString(key, value string) zlog.Field {
 		// Generic redaction for long strings
 		redacted = value[:3] + strings.Repeat("*", len(value)-6) + value[len(value)-3:]
 	}
-	
+
 	return zlog.String(key, redacted)
 }
 
@@ -52,14 +52,14 @@ func MaskedEmail(key, email string) zlog.Field {
 	if len(parts) != 2 {
 		return zlog.String(key, "invalid-email")
 	}
-	
+
 	username := parts[0]
 	domain := parts[1]
-	
+
 	if len(username) <= 1 {
 		return zlog.String(key, "*@"+domain)
 	}
-	
+
 	masked := string(username[0]) + strings.Repeat("*", len(username)-1) + "@" + domain
 	return zlog.String(key, masked)
 }
@@ -78,7 +78,7 @@ func TruncatedToken(key, token string) zlog.Field {
 	if len(token) <= 10 {
 		return zlog.String(key, strings.Repeat("*", len(token)))
 	}
-	
+
 	truncated := token[:6] + "..." + token[len(token)-4:]
 	return zlog.String(key, truncated)
 }
@@ -109,14 +109,14 @@ func IPAnonymized(key, ip string) zlog.Field {
 // Useful for: ages, salaries, counts
 func SensitiveInt(key string, value int) zlog.Field {
 	var rangeStr string
-	
+
 	switch {
 	case value < 18:
 		rangeStr = "<18"
 	case value < 25:
 		rangeStr = "18-24"
 	case value < 35:
-		rangeStr = "25-34"  
+		rangeStr = "25-34"
 	case value < 50:
 		rangeStr = "35-49"
 	case value < 65:
@@ -124,7 +124,7 @@ func SensitiveInt(key string, value int) zlog.Field {
 	default:
 		rangeStr = "65+"
 	}
-	
+
 	return zlog.String(key, rangeStr)
 }
 
@@ -153,7 +153,7 @@ func (cf *ComplianceFields) AddString(key, value string) *ComplianceFields {
 
 func (cf *ComplianceFields) Fields() []zlog.Field {
 	// Add compliance metadata
-	cf.fields = append(cf.fields, 
+	cf.fields = append(cf.fields,
 		zlog.Strings("compliance_tags", cf.tags),
 		zlog.Bool("pii_present", true),
 	)
@@ -170,11 +170,11 @@ func main() {
 
 	// Enable standard logging
 	zlog.EnableStandardLogging(zlog.INFO)
-	
+
 	// Route security events
-	zlog.RouteSignal(SECURITY_AUDIT, zlog.NewSink("security", func(_ context.Context, event zlog.Event) error {
+	zlog.RouteSignal(SECURITY_AUDIT, zlog.NewSink("security", func(_ context.Context, event zlog.Log) error {
 		fmt.Printf("🔐 [SECURITY] %s\n", event.Message)
-		for _, field := range event.Fields {
+		for _, field := range event.Data {
 			fmt.Printf("   %s: %v\n", field.Key, field.Value)
 		}
 		return nil
@@ -220,9 +220,9 @@ func main() {
 	// Example 5: Complex transformation
 	fmt.Println("\n--- Session Tracking ---")
 	sessionData := map[string]string{
-		"session_id": "sess_abc123xyz789",
-		"user_email": "admin@example.org",
-		"auth_token": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+		"session_id":  "sess_abc123xyz789",
+		"user_email":  "admin@example.org",
+		"auth_token":  "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
 		"credit_card": "5555-4444-3333-2222",
 	}
 

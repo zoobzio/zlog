@@ -7,9 +7,9 @@ import (
 )
 
 func TestDispatch(t *testing.T) {
-	// Basic test that dispatch exists
-	if dispatch == nil {
-		t.Fatal("dispatch is nil")
+	// Basic test that defaultLogger exists
+	if defaultLogger == nil {
+		t.Fatal("defaultLogger is nil")
 	}
 }
 
@@ -18,7 +18,7 @@ func TestDispatch(t *testing.T) {
 //nolint:revive // t is unused but test confirms no panic occurs
 func TestDispatchProcessError(t *testing.T) {
 	// Create a sink that returns an error
-	errorSink := NewSink("error-test", func(_ context.Context, _ Event) error {
+	errorSink := NewSink("error-test", func(_ context.Context, _ Log) error {
 		return errors.New("test error")
 	})
 
@@ -28,7 +28,7 @@ func TestDispatchProcessError(t *testing.T) {
 
 	// Process should not panic even with error
 	event := NewEvent(signal, "test", nil)
-	dispatch.process(event) // Should handle error gracefully
+	defaultLogger.Process(event) // Should handle error gracefully
 
 	// Test passes if no panic occurred
 }

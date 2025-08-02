@@ -4,28 +4,19 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/zoobzio/pipz"
 )
 
 // Benchmark-specific helpers
 
 // noOpSink is a sink that does nothing - used to avoid stderr output during benchmarks.
-var noOpSink = NewSink("benchmark-noop", func(_ context.Context, _ Event) error {
+var noOpSink = NewSink("benchmark-noop", func(_ context.Context, _ Log) error {
 	return nil
 })
 
 // setupBenchmarks configures routing for benchmarks to avoid output.
 func setupBenchmarks() {
 	// Clear all routes to ensure no output during benchmarks
-	dispatch = &Dispatch{
-		routes:    make(map[Signal][]Sink),
-		sequences: make(map[Signal]*pipz.Sequence[Event]),
-	}
-	// Recreate the router
-	dispatch.router = pipz.NewSwitch[Event, Signal]("signal-router", func(_ context.Context, e Event) Signal {
-		return e.Signal
-	})
+	defaultLogger = NewLogger[Fields]()
 }
 
 func init() {
@@ -148,13 +139,13 @@ func BenchmarkSinks(b *testing.B) {
 
 	b.Run("JSONSink", func(b *testing.B) {
 		// Create a JSON sink that simulates JSON serialization without I/O
-		jsonSink := NewSink("json-bench", func(_ context.Context, e Event) error {
+		jsonSink := NewSink("json-bench", func(_ context.Context, e Log) error {
 			// Simulate JSON serialization work
-			data := make(map[string]interface{}, len(e.Fields)+3)
+			data := make(map[string]interface{}, len(e.Data)+3)
 			data["time"] = e.Time
 			data["signal"] = e.Signal
 			data["message"] = e.Message
-			for _, f := range e.Fields {
+			for _, f := range e.Data {
 				data[f.Key] = f.Value
 			}
 			return nil
@@ -241,7 +232,7 @@ func BenchmarkProduction(b *testing.B) {
 
 	b.Run("FilteredLogging", func(b *testing.B) {
 		// Production scenario with filtering
-		filteredSink := noOpSink.WithFilter(func(_ context.Context, e Event) bool {
+		filteredSink := noOpSink.WithFilter(func(_ context.Context, e Log) bool {
 			return e.Signal == ERROR || e.Signal == FATAL
 		})
 		RouteSignal(DEBUG, filteredSink)
@@ -274,7 +265,7 @@ func BenchmarkRouting(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			dispatch.process(event)
+			defaultLogger.Process(event)
 		}
 	})
 
@@ -290,7 +281,7 @@ func BenchmarkRouting(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			dispatch.process(event)
+			defaultLogger.Process(event)
 		}
 	})
 }

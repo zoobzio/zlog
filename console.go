@@ -138,7 +138,7 @@ func formatCaller(caller CallerInfo, useColors bool) string {
 //	zlog.RouteSignal(zlog.ERROR, consoleSink)
 //
 //	// With adapters for filtering
-//	devSink := consoleSink.WithFilter(func(ctx context.Context, e zlog.Event) bool {
+//	devSink := consoleSink.WithFilter(func(ctx context.Context, e zlog.Log) bool {
 //	    return e.Signal != zlog.DEBUG // Hide debug in development
 //	})
 //
@@ -147,7 +147,7 @@ func formatCaller(caller CallerInfo, useColors bool) string {
 func NewPrettyConsoleSink() *Sink {
 	useColors := isTerminal()
 
-	return NewSink("pretty-console", func(_ context.Context, event Event) error {
+	return NewSink("pretty-console", func(_ context.Context, event Log) error {
 		// Format timestamp (compact format for readability)
 		timestamp := event.Time.Format("15:04:05")
 
@@ -165,7 +165,7 @@ func NewPrettyConsoleSink() *Sink {
 			callerDisplay)
 
 		// Format structured fields
-		fieldsDisplay := formatFields(event.Fields, useColors)
+		fieldsDisplay := formatFields(event.Data, useColors)
 
 		// Write complete entry to stderr
 		fmt.Fprintf(os.Stderr, "%s%s\n", mainLine, fieldsDisplay)

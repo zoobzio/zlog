@@ -319,7 +319,7 @@ func TestRotatingFileSinkWithAdapters(t *testing.T) {
 
 	t.Run("works with filter adapter", func(t *testing.T) {
 		filterFile := filepath.Join(tempDir, "filter_test.log")
-		sink := NewRotatingFileSink(filterFile, 1024*1024, 3).WithFilter(func(_ context.Context, e Event) bool {
+		sink := NewRotatingFileSink(filterFile, 1024*1024, 3).WithFilter(func(_ context.Context, e Log) bool {
 			return e.Signal == "ERROR" // Only log errors
 		})
 
@@ -421,7 +421,7 @@ func TestRotatingFileSinkEdgeCases(t *testing.T) {
 		logFile := filepath.Join(tempDir, "integrity.log")
 		sink := NewRotatingFileSink(logFile, 300, 5)
 
-		testEvents := []Event{
+		testEvents := []Log{
 			NewEvent("INFO", "First event", []Field{String("id", "1")}),
 			NewEvent("WARN", "Second event", []Field{String("id", "2")}),
 			NewEvent("ERROR", "Third event", []Field{String("id", "3")}),

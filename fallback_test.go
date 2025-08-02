@@ -53,7 +53,7 @@ func TestSinkWithFallback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var primaryCalled, fallbackCalled bool
 
-			primaryHandler := func(_ context.Context, _ Event) error {
+			primaryHandler := func(_ context.Context, _ Log) error {
 				primaryCalled = true
 				if tt.primaryFails {
 					return errors.New("primary failure")
@@ -61,7 +61,7 @@ func TestSinkWithFallback(t *testing.T) {
 				return nil
 			}
 
-			fallbackHandler := func(_ context.Context, _ Event) error {
+			fallbackHandler := func(_ context.Context, _ Log) error {
 				fallbackCalled = true
 				if tt.fallbackFails {
 					return errors.New("fallback failure")
@@ -107,7 +107,7 @@ func TestSinkWithFallback(t *testing.T) {
 func TestSinkWithFallbackContextCancellation(t *testing.T) {
 	var primaryCalled, fallbackCalled bool
 
-	primaryHandler := func(ctx context.Context, _ Event) error {
+	primaryHandler := func(ctx context.Context, _ Log) error {
 		primaryCalled = true
 		// Check context and fail to trigger fallback
 		if ctx.Err() != nil {
@@ -116,7 +116,7 @@ func TestSinkWithFallbackContextCancellation(t *testing.T) {
 		return errors.New("primary failed")
 	}
 
-	fallbackHandler := func(ctx context.Context, _ Event) error {
+	fallbackHandler := func(ctx context.Context, _ Log) error {
 		fallbackCalled = true
 		// Check context in fallback too
 		if ctx.Err() != nil {
@@ -153,14 +153,14 @@ func TestSinkWithFallbackContextCancellation(t *testing.T) {
 }
 
 func TestSinkWithFallbackEventData(t *testing.T) {
-	var primaryEvent, fallbackEvent Event
+	var primaryEvent, fallbackEvent Log
 
-	primaryHandler := func(_ context.Context, event Event) error {
+	primaryHandler := func(_ context.Context, event Log) error {
 		primaryEvent = event
 		return errors.New("primary failed")
 	}
 
-	fallbackHandler := func(_ context.Context, event Event) error {
+	fallbackHandler := func(_ context.Context, event Log) error {
 		fallbackEvent = event
 		return nil
 	}
@@ -196,11 +196,11 @@ func TestSinkWithFallbackEventData(t *testing.T) {
 		t.Errorf("fallback message mismatch, got %s, want %s", fallbackEvent.Message, originalEvent.Message)
 	}
 
-	if len(primaryEvent.Fields) != len(originalEvent.Fields) {
-		t.Errorf("primary field count mismatch, got %d, want %d", len(primaryEvent.Fields), len(originalEvent.Fields))
+	if len(primaryEvent.Data) != len(originalEvent.Data) {
+		t.Errorf("primary field count mismatch, got %d, want %d", len(primaryEvent.Data), len(originalEvent.Data))
 	}
-	if len(fallbackEvent.Fields) != len(originalEvent.Fields) {
-		t.Errorf("fallback field count mismatch, got %d, want %d", len(fallbackEvent.Fields), len(originalEvent.Fields))
+	if len(fallbackEvent.Data) != len(originalEvent.Data) {
+		t.Errorf("fallback field count mismatch, got %d, want %d", len(fallbackEvent.Data), len(originalEvent.Data))
 	}
 }
 
@@ -209,12 +209,12 @@ func TestSinkWithFallbackChaining(t *testing.T) {
 
 	var calls []string
 
-	primaryHandler := func(_ context.Context, _ Event) error {
+	primaryHandler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "primary")
 		return errors.New("primary failed")
 	}
 
-	fallbackHandler := func(_ context.Context, _ Event) error {
+	fallbackHandler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "fallback")
 		return nil
 	}
@@ -253,17 +253,17 @@ func TestSinkWithFallbackMultipleLevels(t *testing.T) {
 
 	var calls []string
 
-	primaryHandler := func(_ context.Context, _ Event) error {
+	primaryHandler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "primary")
 		return errors.New("primary failed")
 	}
 
-	secondaryHandler := func(_ context.Context, _ Event) error {
+	secondaryHandler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "secondary")
 		return errors.New("secondary failed")
 	}
 
-	tertiaryHandler := func(_ context.Context, _ Event) error {
+	tertiaryHandler := func(_ context.Context, _ Log) error {
 		calls = append(calls, "tertiary")
 		return nil
 	}

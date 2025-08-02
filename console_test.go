@@ -299,7 +299,7 @@ func TestPrettyConsoleSinkWithAdapters(t *testing.T) {
 	os.Stderr = w
 
 	t.Run("works with filter adapter", func(t *testing.T) {
-		sink := NewPrettyConsoleSink().WithFilter(func(_ context.Context, e Event) bool {
+		sink := NewPrettyConsoleSink().WithFilter(func(_ context.Context, e Log) bool {
 			return e.Signal == "ERROR" // Only show errors
 		})
 

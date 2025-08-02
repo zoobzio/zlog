@@ -30,10 +30,10 @@ func TestNewEvent(t *testing.T) {
 	}
 
 	// Check fields
-	if len(event.Fields) != len(fields) {
-		t.Errorf("Fields length = %v, want %v", len(event.Fields), len(fields))
+	if len(event.Data) != len(fields) {
+		t.Errorf("Fields length = %v, want %v", len(event.Data), len(fields))
 	}
-	for i, field := range event.Fields {
+	for i, field := range event.Data {
 		if field.Key != fields[i].Key {
 			t.Errorf("Field[%d].Key = %v, want %v", i, field.Key, fields[i].Key)
 		}
@@ -61,15 +61,15 @@ func TestNewEventEdgeCases(t *testing.T) {
 
 	t.Run("No fields", func(t *testing.T) {
 		event := NewEvent(INFO, "msg", nil)
-		if event.Fields != nil {
-			t.Errorf("Fields = %v, want nil", event.Fields)
+		if event.Data != nil {
+			t.Errorf("Fields = %v, want nil", event.Data)
 		}
 	})
 
 	t.Run("Empty fields slice", func(t *testing.T) {
 		event := NewEvent(INFO, "msg", []Field{})
-		if len(event.Fields) != 0 {
-			t.Errorf("Fields length = %v, want 0", len(event.Fields))
+		if len(event.Data) != 0 {
+			t.Errorf("Fields length = %v, want 0", len(event.Data))
 		}
 	})
 
@@ -95,12 +95,12 @@ func TestEventFieldIndependence(t *testing.T) {
 
 	// The slice in event points to the same underlying array
 	// This is standard Go behavior and not a bug
-	if len(event.Fields) != 1 {
-		t.Errorf("Expected 1 field, got %d", len(event.Fields))
+	if len(event.Data) != 1 {
+		t.Errorf("Expected 1 field, got %d", len(event.Data))
 	}
 
 	// The Field struct itself is copied (value type)
-	if event.Fields[0].Key != "key" || event.Fields[0].Value != "original" {
+	if event.Data[0].Key != "key" || event.Data[0].Value != "original" {
 		t.Errorf("Field not copied correctly")
 	}
 }
@@ -124,28 +124,28 @@ func TestEventClone(t *testing.T) {
 	if cloned.Message != original.Message {
 		t.Errorf("Message not cloned correctly")
 	}
-	if len(cloned.Fields) != len(original.Fields) {
-		t.Errorf("Fields length mismatch: got %d, want %d", len(cloned.Fields), len(original.Fields))
+	if len(cloned.Data) != len(original.Data) {
+		t.Errorf("Fields length mismatch: got %d, want %d", len(cloned.Data), len(original.Data))
 	}
 
 	// Verify fields are copied
-	for i, field := range cloned.Fields {
-		if field != original.Fields[i] {
+	for i, field := range cloned.Data {
+		if field != original.Data[i] {
 			t.Errorf("Field[%d] not cloned correctly", i)
 		}
 	}
 
 	// Verify independence - modify clone's fields
-	if len(cloned.Fields) > 0 {
-		cloned.Fields[0] = String("modified", "changed")
-		if original.Fields[0].Key == "modified" {
+	if len(cloned.Data) > 0 {
+		cloned.Data[0] = String("modified", "changed")
+		if original.Data[0].Key == "modified" {
 			t.Errorf("Clone modification affected original")
 		}
 	}
 
 	// Verify slice independence
-	cloned.Fields = append(cloned.Fields, String("new", "field"))
-	if len(original.Fields) == len(cloned.Fields) {
+	cloned.Data = append(cloned.Data, String("new", "field"))
+	if len(original.Data) == len(cloned.Data) {
 		t.Errorf("Clone slice modification affected original")
 	}
 }

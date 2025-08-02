@@ -41,7 +41,7 @@ func (s *Sink) WithAsync() *Sink {
 	innerProcessor := s.processor
 
 	return &Sink{
-		processor: pipz.Effect("async", func(_ context.Context, event Event) error {
+		processor: pipz.Effect[Log]("async", func(_ context.Context, event Log) error {
 			// Spawn goroutine for fire-and-forget processing
 			go func() {
 				// Use fresh context since parent might be canceled

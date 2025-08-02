@@ -21,14 +21,14 @@ import (
 //
 //	// Only process ERROR events
 //	errorSink := zlog.NewSink("errors", handler).
-//	    WithFilter(func(ctx context.Context, e Event) bool {
+//	    WithFilter(func(ctx context.Context, e Log) bool {
 //	        return e.Signal == zlog.ERROR
 //	    })
 //
 //	// Only process high-value transactions
 //	highValueSink := zlog.NewSink("big-money", handler).
-//	    WithFilter(func(ctx context.Context, e Event) bool {
-//	        for _, field := range e.Fields {
+//	    WithFilter(func(ctx context.Context, e Log) bool {
+//	        for _, field := range e.Data {
 //	            if field.Key == "amount" {
 //	                if amount, ok := field.Value.(float64); ok {
 //	                    return amount > 10000.0
@@ -40,8 +40,8 @@ import (
 //
 //	// Only process events from specific source
 //	internalSink := zlog.NewSink("internal", handler).
-//	    WithFilter(func(ctx context.Context, e Event) bool {
-//	        for _, field := range e.Fields {
+//	    WithFilter(func(ctx context.Context, e Log) bool {
+//	        for _, field := range e.Data {
 //	            if field.Key == "source" && field.Value == "internal" {
 //	                return true
 //	            }
@@ -51,7 +51,7 @@ import (
 //
 //	// Chain with other capabilities
 //	filteredRetrySink := zlog.NewSink("api", handler).
-//	    WithFilter(func(ctx context.Context, e Event) bool {
+//	    WithFilter(func(ctx context.Context, e Log) bool {
 //	        return e.Signal == zlog.ERROR
 //	    }).
 //	    WithRetry(3).
@@ -63,8 +63,8 @@ import (
 //
 // The predicate function should be fast since it's called for every
 // event routed to this sink. Avoid expensive operations in the filter.
-func (s *Sink) WithFilter(predicate func(context.Context, Event) bool) *Sink {
+func (s *Sink) WithFilter(predicate func(context.Context, Log) bool) *Sink {
 	return &Sink{
-		processor: pipz.NewFilter("filter", predicate, s.processor),
+		processor: pipz.NewFilter[Log]("filter", predicate, s.processor),
 	}
 }

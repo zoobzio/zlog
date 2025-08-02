@@ -478,7 +478,7 @@ func TestHTTPSinkWithAdapters(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sink := NewHTTPSink(server.URL).WithFilter(func(_ context.Context, e Event) bool {
+		sink := NewHTTPSink(server.URL).WithFilter(func(_ context.Context, e Log) bool {
 			return e.Signal == "ERROR" // Only send errors
 		})
 

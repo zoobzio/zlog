@@ -3,6 +3,7 @@ package zlog
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -52,10 +53,10 @@ func TestSinkWithTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var handlerCalled bool
+			var handlerCalled atomic.Bool
 
-			handler := func(ctx context.Context, _ Event) error {
-				handlerCalled = true
+			handler := func(ctx context.Context, _ Log) error {
+				handlerCalled.Store(true)
 
 				// Check for context cancellation during delay
 				select {
@@ -75,7 +76,7 @@ func TestSinkWithTimeout(t *testing.T) {
 			duration := time.Since(start)
 
 			// Check that handler was called
-			if !handlerCalled {
+			if !handlerCalled.Load() {
 				t.Error("expected handler to be called")
 			}
 
@@ -105,7 +106,7 @@ func TestSinkWithTimeout(t *testing.T) {
 func TestSinkWithTimeoutContextCancellation(t *testing.T) {
 	var handlerCalled bool
 
-	handler := func(ctx context.Context, _ Event) error {
+	handler := func(ctx context.Context, _ Log) error {
 		handlerCalled = true
 
 		// Simulate some work, but respect context cancellation
@@ -153,7 +154,7 @@ func TestSinkWithTimeoutContextCancellation(t *testing.T) {
 func TestSinkWithTimeoutHandlerError(t *testing.T) {
 	// Test that handler errors are propagated correctly
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		// Quick operation that returns an error
 		return errors.New("handler error")
 	}
@@ -175,7 +176,7 @@ func TestSinkWithTimeoutChaining(t *testing.T) {
 
 	var callCount int
 
-	handler := func(_ context.Context, _ Event) error {
+	handler := func(_ context.Context, _ Log) error {
 		callCount++
 		time.Sleep(10 * time.Millisecond) // Quick operation
 		return nil
@@ -210,7 +211,7 @@ func TestSinkWithTimeoutChaining(t *testing.T) {
 func TestSinkWithTimeoutLongOperation(t *testing.T) {
 	// Test with an operation that's definitely too slow
 
-	handler := func(ctx context.Context, _ Event) error {
+	handler := func(ctx context.Context, _ Log) error {
 		// Very slow operation that should definitely timeout
 		select {
 		case <-time.After(1 * time.Second):
@@ -245,9 +246,9 @@ func TestSinkWithTimeoutLongOperation(t *testing.T) {
 }
 
 func TestSinkWithTimeoutPreservesEventData(t *testing.T) {
-	var receivedEvent Event
+	var receivedEvent Log
 
-	handler := func(_ context.Context, event Event) error {
+	handler := func(_ context.Context, event Log) error {
 		receivedEvent = event
 		return nil
 	}
@@ -265,14 +266,14 @@ func TestSinkWithTimeoutPreservesEventData(t *testing.T) {
 		t.Errorf("expected no error but got: %v", err)
 	}
 
-	// Event should be preserved exactly
+	// Log should be preserved exactly
 	if receivedEvent.Signal != originalEvent.Signal {
 		t.Errorf("signal mismatch, got %s, want %s", receivedEvent.Signal, originalEvent.Signal)
 	}
 	if receivedEvent.Message != originalEvent.Message {
 		t.Errorf("message mismatch, got %s, want %s", receivedEvent.Message, originalEvent.Message)
 	}
-	if len(receivedEvent.Fields) != len(originalEvent.Fields) {
-		t.Errorf("field count mismatch, got %d, want %d", len(receivedEvent.Fields), len(originalEvent.Fields))
+	if len(receivedEvent.Data) != len(originalEvent.Data) {
+		t.Errorf("field count mismatch, got %d, want %d", len(receivedEvent.Data), len(originalEvent.Data))
 	}
 }
